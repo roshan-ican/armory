@@ -1,0 +1,7 @@
+*.db
+*.db-shm
+*.db-wal
+*.exe
+.vs/
+.vscode/
+.idea/
