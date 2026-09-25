@@ -1,21 +1,154 @@
 {{define "content"}}
-<div class="page-heading"><div><p class="eyebrow">Inventory</p><h1>Firearms</h1><p>Register, locate, and manage secured firearms.</p></div><span class="record-count">{{len .Guns}} records</span></div>
-<form class="panel create-form" hx-post="/guns" hx-target="#gun-rows" hx-swap="beforeend" hx-on::before-request="document.getElementById('form-error').textContent = ''">
-  <div class="panel-heading"><div><h2>Register firearm</h2><p>Assign a firearm to an available locker slot.</p></div></div><div class="form-grid form-grid-wide">
-  <select name="category_id" required><option value="">Select category…</option>{{range .Categories}}{{if .Active}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}</select>
-  <select name="slot_id" required><option value="">Select storage slot…</option>{{range .FreeSlots}}<option value="{{.ID}}">{{.LockerName}} · slot {{.SlotNo}}</option>{{end}}</select>
-  <input name="serial" placeholder="Serial number" required><input name="model" placeholder="Model (optional)"><input name="notes" placeholder="Notes (optional)"><button class="button-primary" type="submit">Register firearm</button></div>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Inventory</p>
+    <h1>Firearms</h1>
+    <p>Register, locate, and manage secured firearms.</p>
+  </div>
+  <span class="record-count">{{len .Guns}} records</span>
+</div>
+<form
+  class="panel create-form"
+  hx-post="/guns"
+  hx-target="#gun-rows"
+  hx-swap="beforeend"
+  hx-on::before-request="document.getElementById('form-error').textContent = ''"
+>
+  <div class="panel-heading">
+    <div>
+      <h2>Register firearm</h2>
+      <p>Assign a firearm to an available locker slot.</p>
+    </div>
+  </div>
+  <div class="form-grid form-grid-wide">
+    <select name="category_id" required>
+      <option value="">Select category…</option>
+      {{range .Categories}}{{if .Active}}
+      <option value="{{.ID}}">{{.Name}}</option>
+      {{end}}{{end}}
+    </select>
+    <select name="slot_id" required>
+      <option value="">Select storage slot…</option>
+      {{range .FreeSlots}}
+      <option value="{{.ID}}">{{.LockerName}} · slot {{.SlotNo}}</option>
+      {{end}}
+    </select>
+    <input name="serial" placeholder="Serial number" required /><input
+      name="model"
+      placeholder="Model (optional)"
+    /><input name="notes" placeholder="Notes (optional)" /><button
+      class="button-primary"
+      type="submit"
+    >
+      Register firearm
+    </button>
+  </div>
   <p id="form-error" class="form-error" role="alert"></p>
 </form>
-<div class="panel table-panel"><div class="panel-heading"><div><h2>Inventory register</h2><p>Current assignment and lifecycle status.</p></div></div><div class="table-scroll"><table>
-  <thead><tr><th>Serial</th><th>Category</th><th>Model</th><th>Location</th><th>Status</th><th>Notes</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="gun-rows">{{range .Guns}}{{template "gun_row" .}}{{end}}</tbody>
-</table></div></div>{{end}}
-{{define "gun_row"}}<tr>
-  <td>{{.Serial}}</td><td>{{.CategoryName}}</td><td>{{if .Model}}{{.Model}}{{else}}—{{end}}</td><td>{{if .LockerName}}<span class="location">{{.LockerName}} <small>Slot {{.SlotNo}}</small></span>{{else}}—{{end}}</td>
-  <td><span class="status status-{{.Status}}"><i></i>{{.Status}}</span></td><td class="notes-cell">{{if .Notes}}{{.Notes}}{{else}}—{{end}}</td><td class="row-actions">{{if eq .Status "in"}}<button class="button-secondary" hx-get="/guns/{{.ID}}/edit" hx-target="closest tr" hx-swap="outerHTML">Edit</button><button class="button-danger" hx-post="/guns/{{.ID}}/retire" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Retire {{.Serial}}? This frees its slot.">Retire</button>{{end}}</td>
-</tr>{{end}}
-{{define "gun_edit_row"}}<tr class="editing-row">
-  <td><input name="serial" value="{{.Gun.Serial}}" required></td><td><select name="category_id" required>{{range .Categories}}{{if .Active}}<option value="{{.ID}}" {{if eq .ID $.Gun.CategoryID}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select></td><td><input name="model" value="{{.Gun.Model}}"></td>
-  <td><select name="slot_id" required>{{if .Gun.SlotID}}<option value="{{.Gun.SlotID}}" selected>{{.Gun.LockerName}} · slot {{.Gun.SlotNo}}</option>{{end}}{{range .FreeSlots}}<option value="{{.ID}}">{{.LockerName}} · slot {{.SlotNo}}</option>{{end}}</select></td>
-  <td><span class="status status-{{.Gun.Status}}"><i></i>{{.Gun.Status}}</span></td><td><input name="notes" value="{{.Gun.Notes}}"></td><td class="row-actions"><button class="button-primary" hx-post="/guns/{{.Gun.ID}}" hx-include="closest tr" hx-target="closest tr" hx-swap="outerHTML">Save</button><button class="button-secondary" hx-get="/guns/{{.Gun.ID}}" hx-target="closest tr" hx-swap="outerHTML">Cancel</button></td>
-</tr>{{end}}
+<div class="panel table-panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Inventory register</h2>
+      <p>Current assignment and lifecycle status.</p>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Serial</th>
+          <th>Category</th>
+          <th>Model</th>
+          <th>Location</th>
+          <th>Status</th>
+          <th>Notes</th>
+          <th><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody id="gun-rows">
+        {{range .Guns}}{{template "gun_row" .}}{{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}} {{define "gun_row"}}
+<tr>
+  <td>{{.Serial}}</td>
+  <td>{{.CategoryName}}</td>
+  <td>{{if .Model}}{{.Model}}{{else}}—{{end}}</td>
+  <td>
+    {{if .LockerName}}<span class="location"
+      >{{.LockerName}} <small>Slot {{.SlotNo}}</small></span
+    >{{else}}—{{end}}
+  </td>
+  <td>
+    <span class="status status-{{.Status}}"><i></i>{{.Status}}</span>
+  </td>
+  <td class="notes-cell">{{if .Notes}}{{.Notes}}{{else}}—{{end}}</td>
+  <td class="row-actions">
+    {{if eq .Status "in"}}<button
+      class="button-secondary"
+      hx-get="/guns/{{.ID}}/edit"
+      hx-target="closest tr"
+      hx-swap="outerHTML"
+    >
+      Edit</button
+    ><button
+      class="button-danger"
+      hx-post="/guns/{{.ID}}/retire"
+      hx-target="closest tr"
+      hx-swap="outerHTML"
+      hx-confirm="Retire {{.Serial}}? This frees its slot."
+    >
+      Retire</button
+    >{{end}}
+  </td>
+</tr>
+{{end}} {{define "gun_edit_row"}}
+<tr class="editing-row">
+  <td><input name="serial" value="{{.Gun.Serial}}" required /></td>
+  <td>
+    <select name="category_id" required>
+      {{range .Categories}}{{if .Active}}
+      <option value="{{.ID}}" {{if eq .ID $.Gun.CategoryID}}selected{{end}}>
+        {{.Name}}
+      </option>
+      {{end}}{{end}}
+    </select>
+  </td>
+  <td><input name="model" value="{{.Gun.Model}}" /></td>
+  <td>
+    <select name="slot_id" required>
+      {{if .Gun.SlotID}}
+      <option value="{{.Gun.SlotID}}" selected>
+        {{.Gun.LockerName}} · slot {{.Gun.SlotNo}}
+      </option>
+      {{end}}{{range .FreeSlots}}
+      <option value="{{.ID}}">{{.LockerName}} · slot {{.SlotNo}}</option>
+      {{end}}
+    </select>
+  </td>
+  <td>
+    <span class="status status-{{.Gun.Status}}"><i></i>{{.Gun.Status}}</span>
+  </td>
+  <td><input name="notes" value="{{.Gun.Notes}}" /></td>
+  <td class="row-actions">
+    <button
+      class="button-primary"
+      hx-post="/guns/{{.Gun.ID}}"
+      hx-include="closest tr"
+      hx-target="closest tr"
+      hx-swap="outerHTML"
+    >
+      Save</button
+    ><button
+      class="button-secondary"
+      hx-get="/guns/{{.Gun.ID}}"
+      hx-target="closest tr"
+      hx-swap="outerHTML"
+    >
+      Cancel
+    </button>
+  </td>
+</tr>
+{{end}}

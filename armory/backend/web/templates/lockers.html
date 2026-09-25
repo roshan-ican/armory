@@ -1,5 +1,78 @@
 {{define "content"}}
-<div class="page-heading"><div><p class="eyebrow">Infrastructure</p><h1>Storage lockers</h1><p>Monitor secure cabinets, network details, and slot availability.</p></div><span class="record-count">{{len .Lockers}} lockers</span></div>
-<form class="panel create-form" hx-post="/lockers" hx-target="#locker-list" hx-swap="beforeend" hx-on::before-request="document.getElementById('form-error').textContent = ''"><div class="panel-heading"><div><h2>Add storage locker</h2><p>Register a cabinet and its network endpoint.</p></div></div><div class="form-grid"><input name="name" placeholder="Name, e.g. Locker 1" required><input name="location" placeholder="Location (optional)"><input name="ip_address" placeholder="IP address (optional)"><button class="button-primary" type="submit">Add locker</button></div><p id="form-error" class="form-error" role="alert"></p></form>
-<div id="locker-list" class="locker-grid">{{range .Lockers}}{{template "locker_card" .}}{{end}}</div>{{end}}
-{{define "locker_card"}}<section class="panel locker-card"><div class="locker-heading"><div><p class="eyebrow">Secure cabinet</p><h2>{{.Name}}</h2></div><span class="status status-in"><i></i>Active</span></div><p class="locker-meta"><span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span><span>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP set{{end}}</span></p><div class="table-scroll"><table><thead><tr><th>Slot</th><th>Sensor ID</th><th>State</th></tr></thead><tbody>{{range .Slots}}<tr><td><strong>#{{.SlotNo}}</strong></td><td><code>{{.SensorID}}</code></td><td><span class="status {{if .Active}}status-in{{else}}status-retired{{end}}"><i></i>{{if .Active}}Active{{else}}Inactive{{end}}</span></td></tr>{{end}}</tbody></table></div></section>{{end}}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Infrastructure</p>
+    <h1>Storage lockers</h1>
+    <p>Monitor secure cabinets, network details, and slot availability.</p>
+  </div>
+  <span class="record-count">{{len .Lockers}} lockers</span>
+</div>
+<form
+  class="panel create-form"
+  hx-post="/lockers"
+  hx-target="#locker-list"
+  hx-swap="beforeend"
+  hx-on::before-request="document.getElementById('form-error').textContent = ''"
+>
+  <div class="panel-heading">
+    <div>
+      <h2>Add storage locker</h2>
+      <p>Register a cabinet and its network endpoint.</p>
+    </div>
+  </div>
+  <div class="form-grid">
+    <input name="name" placeholder="Name, e.g. Locker 1" required /><input
+      name="location"
+      placeholder="Location (optional)"
+    /><input name="ip_address" placeholder="IP address (optional)" /><button
+      class="button-primary"
+      type="submit"
+    >
+      Add locker
+    </button>
+  </div>
+  <p id="form-error" class="form-error" role="alert"></p>
+</form>
+<div id="locker-list" class="locker-grid">
+  {{range .Lockers}}{{template "locker_card" .}}{{end}}
+</div>
+{{end}} {{define "locker_card"}}
+<section class="panel locker-card">
+  <div class="locker-heading">
+    <div>
+      <p class="eyebrow">Secure cabinet</p>
+      <h2>{{.Name}}</h2>
+    </div>
+    <span class="status status-in"><i></i>Active</span>
+  </div>
+  <p class="locker-meta">
+    <span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span
+    ><span>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP set{{end}}</span>
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Slot</th>
+          <th>Sensor ID</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Slots}}
+        <tr>
+          <td><strong>#{{.SlotNo}}</strong></td>
+          <td><code>{{.SensorID}}</code></td>
+          <td>
+            <span
+              class="status {{if .Active}}status-in{{else}}status-retired{{end}}"
+              ><i></i>{{if .Active}}Active{{else}}Inactive{{end}}</span
+            >
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}

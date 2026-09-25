@@ -1,5 +1,63 @@
 {{define "content"}}
-<div class="page-heading"><div><p class="eyebrow">Configuration</p><h1>Categories</h1><p>Maintain the approved firearm classification list.</p></div><span class="record-count">{{len .Categories}} categories</span></div>
-<form class="panel create-form" hx-post="/categories" hx-target="#category-rows" hx-swap="beforeend" hx-on::before-request="document.getElementById('form-error').textContent = ''"><div class="panel-heading"><div><h2>Add category</h2><p>Create an inventory classification.</p></div></div><div class="form-grid form-grid-compact"><input name="name" placeholder="e.g. PISTOL" required><button class="button-primary" type="submit">Add category</button></div><p id="form-error" class="form-error" role="alert"></p></form>
-<div class="panel table-panel"><div class="panel-heading"><div><h2>Classification register</h2><p>Categories available during firearm registration.</p></div></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody id="category-rows">{{range .Categories}}{{template "category_row" .}}{{end}}</tbody></table></div></div>{{end}}
-{{define "category_row"}}<tr><td><strong>{{.Name}}</strong></td><td><span class="status {{if .Active}}status-in{{else}}status-retired{{end}}"><i></i>{{if .Active}}Active{{else}}Inactive{{end}}</span></td></tr>{{end}}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Configuration</p>
+    <h1>Categories</h1>
+    <p>Maintain the approved firearm classification list.</p>
+  </div>
+  <span class="record-count">{{len .Categories}} categories</span>
+</div>
+<form
+  class="panel create-form"
+  hx-post="/categories"
+  hx-target="#category-rows"
+  hx-swap="beforeend"
+  hx-on::before-request="document.getElementById('form-error').textContent = ''"
+>
+  <div class="panel-heading">
+    <div>
+      <h2>Add category</h2>
+      <p>Create an inventory classification.</p>
+    </div>
+  </div>
+  <div class="form-grid form-grid-compact">
+    <input name="name" placeholder="e.g. PISTOL" required /><button
+      class="button-primary"
+      type="submit"
+    >
+      Add category
+    </button>
+  </div>
+  <p id="form-error" class="form-error" role="alert"></p>
+</form>
+<div class="panel table-panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Classification register</h2>
+      <p>Categories available during firearm registration.</p>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="category-rows">
+        {{range .Categories}}{{template "category_row" .}}{{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}} {{define "category_row"}}
+<tr>
+  <td><strong>{{.Name}}</strong></td>
+  <td>
+    <span class="status {{if .Active}}status-in{{else}}status-retired{{end}}"
+      ><i></i>{{if .Active}}Active{{else}}Inactive{{end}}</span
+    >
+  </td>
+</tr>
+{{end}}
