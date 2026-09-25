@@ -12,15 +12,16 @@ import (
 type Server struct {
 	categories *services.CategoryService
 	lockers    *services.LockerService
+	guns       *services.GunService
 	pages      map[string]*template.Template
 }
 
-func New(categories *services.CategoryService, lockers *services.LockerService) (*Server, error) {
-	pages, err := loadPages("categories", "lockers")
+func New(categories *services.CategoryService, lockers *services.LockerService, guns *services.GunService) (*Server, error) {
+	pages, err := loadPages("categories", "lockers", "guns")
 	if err != nil {
 		return nil, err
 	}
-	return &Server{categories: categories, lockers: lockers, pages: pages}, nil
+	return &Server{categories: categories, lockers: lockers, guns: guns, pages: pages}, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -28,12 +29,15 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.Handle("GET /static/", http.FileServerFS(web.FS))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/categories", http.StatusSeeOther)
+		http.Redirect(w, r, "/guns", http.StatusSeeOther)
 	})
 	mux.HandleFunc("GET /categories", s.listCategories)
 	mux.HandleFunc("POST /categories", s.createCategory)
 	mux.HandleFunc("GET /lockers", s.listLockers)
 	mux.HandleFunc("POST /lockers", s.createLocker)
+	mux.HandleFunc("GET /guns", s.listGuns)
+	mux.HandleFunc("POST /guns", s.createGun)
+	mux.HandleFunc("POST /guns/{id}/retire", s.retireGun)
 	return mux
 }
 

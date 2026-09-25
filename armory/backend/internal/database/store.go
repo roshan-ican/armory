@@ -26,6 +26,13 @@ func now() string {
 	return time.Now().UTC().Format(time.RFC3339)
 }
 
+func nullIfZero(n int64) any {
+	if n == 0 {
+		return nil
+	}
+	return n
+}
+
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil

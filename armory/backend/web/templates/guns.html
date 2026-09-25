@@ -1,0 +1,40 @@
+{{define "content"}}
+<h1>Guns</h1>
+
+<form hx-post="/guns" hx-target="#gun-rows" hx-swap="beforeend"
+      hx-on::before-request="document.getElementById('form-error').textContent = ''">
+  <select name="category_id" required>
+    <option value="">Category…</option>
+    {{range .Categories}}{{if .Active}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+  </select>
+  <select name="slot_id" required>
+    <option value="">Slot…</option>
+    {{range .FreeSlots}}<option value="{{.ID}}">{{.LockerName}} · slot {{.SlotNo}}</option>{{end}}
+  </select>
+  <input name="serial" placeholder="Serial number" required>
+  <input name="model" placeholder="Model (optional)">
+  <input name="notes" placeholder="Notes (optional)">
+  <button type="submit">Add gun</button>
+  <p id="form-error"></p>
+</form>
+
+<table>
+  <thead>
+    <tr><th>Serial</th><th>Category</th><th>Model</th><th>Location</th><th>Status</th><th>Notes</th><th></th></tr>
+  </thead>
+  <tbody id="gun-rows">
+    {{range .Guns}}{{template "gun_row" .}}{{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{define "gun_row"}}<tr>
+  <td>{{.Serial}}</td>
+  <td>{{.CategoryName}}</td>
+  <td>{{.Model}}</td>
+  <td>{{if .LockerName}}{{.LockerName}} · slot {{.SlotNo}}{{else}}—{{end}}</td>
+  <td>{{.Status}}</td>
+  <td>{{.Notes}}</td>
+  <td>{{if eq .Status "in"}}<button hx-post="/guns/{{.ID}}/retire" hx-target="closest tr" hx-swap="outerHTML"
+      hx-confirm="Retire {{.Serial}}? This frees its slot.">Retire</button>{{end}}</td>
+</tr>{{end}}
