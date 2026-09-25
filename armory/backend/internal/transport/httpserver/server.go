@@ -38,6 +38,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /guns", s.listGuns)
 	mux.HandleFunc("POST /guns", s.createGun)
 	mux.HandleFunc("POST /guns/{id}/retire", s.retireGun)
+	mux.HandleFunc("GET /guns/{id}", s.gunRow)
+	mux.HandleFunc("GET /guns/{id}/edit", s.editGun)
+	mux.HandleFunc("POST /guns/{id}", s.updateGun)
 	return mux
 }
 

@@ -1,17 +1,12 @@
 {{define "layout"}}<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} · Armory</title>
-  <script src="/static/htmx.min.js"></script>
-</head>
-<body>
-  <nav>
-    <a href="/guns">Guns</a>
-    <a href="/categories">Categories</a>
-    <a href="/lockers">Lockers</a>
-  </nav>
-  <main>{{template "content" .}}</main>
-</body>
-</html>{{end}}
+<html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
+  <title>{{.Title}} · Armory Control</title><link rel="stylesheet" href="/static/styles.css"><script src="/static/htmx.min.js"></script>
+</head><body>
+  <header class="topbar"><a class="brand" href="/guns"><span class="brand-mark">AC</span><span><strong>Armory Control</strong><small>Storage administration</small></span></a><span class="system-status"><i></i> System online</span></header>
+  <div class="app-shell"><nav class="sidebar" aria-label="Primary navigation"><p class="nav-label">Management</p>
+    <a href="/guns" {{if eq .Title "Guns"}}class="active" aria-current="page"{{end}}><span>▦</span> Firearms</a>
+    <a href="/lockers" {{if eq .Title "Lockers"}}class="active" aria-current="page"{{end}}><span>▤</span> Lockers</a>
+    <a href="/categories" {{if eq .Title "Categories"}}class="active" aria-current="page"{{end}}><span>◇</span> Categories</a>
+  </nav><main>{{template "content" .}}</main></div>
+</body></html>{{end}}

@@ -13,4 +13,5 @@ var (
 	ErrSlotOccupied     = errors.New("that slot already has a gun")
 	ErrCannotRetire     = errors.New("only guns that are in the locker can be retired")
 	ErrSlotRequired     = errors.New("choose a slot for the gun")
+	ErrCannotEdit       = errors.New("only guns that are in the locker can be edited")
 )

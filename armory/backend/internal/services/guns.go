@@ -58,3 +58,34 @@ func (s *GunService) Retire(ctx context.Context, id int64) (models.Gun, error) {
 	}
 	return g, err
 }
+
+func (s *GunService) Get(ctx context.Context, id int64) (models.Gun, error) {
+	return s.store.GetGun(ctx, id)
+}
+
+func (s *GunService) Update(ctx context.Context, g models.Gun) (models.Gun, error) {
+	g.Serial = strings.ToUpper(strings.TrimSpace(g.Serial))
+	g.Model = strings.TrimSpace(g.Model)
+	g.Notes = strings.TrimSpace(g.Notes)
+
+	if g.CategoryID == 0 {
+		return models.Gun{}, ErrCategoryRequired
+	}
+	if g.SlotID == 0 {
+		return models.Gun{}, ErrSlotRequired
+	}
+	if g.Serial == "" {
+		return models.Gun{}, ErrSerialRequired
+	}
+
+	updated, err := s.store.UpdateGun(ctx, g)
+	switch {
+	case errors.Is(err, database.ErrDuplicate):
+		return models.Gun{}, ErrGunExists
+	case errors.Is(err, database.ErrSlotTaken):
+		return models.Gun{}, ErrSlotOccupied
+	case errors.Is(err, database.ErrNotFound):
+		return models.Gun{}, ErrCannotEdit
+	}
+	return updated, err
+}

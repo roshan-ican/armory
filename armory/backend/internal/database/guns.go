@@ -130,3 +130,28 @@ func (s *Store) RetireGun(ctx context.Context, id int64) (models.Gun, error) {
 	}
 	return s.GetGun(ctx, id)
 }
+
+func (s *Store) UpdateGun(ctx context.Context, g models.Gun) (models.Gun, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE guns SET category_id = ?, slot_id = ?, serial = ?, model = ?, notes = ?, updated_at = ?
+		 WHERE id = ? AND status = 'in'`,
+		g.CategoryID, g.SlotID, g.Serial, nullIfEmpty(g.Model), nullIfEmpty(g.Notes), now(), g.ID)
+	if err != nil {
+		if isUniqueViolation(err) && strings.Contains(err.Error(), "guns.slot_id") {
+			return models.Gun{}, ErrSlotTaken
+		}
+		if isUniqueViolation(err) {
+			return models.Gun{}, ErrDuplicate
+		}
+		return models.Gun{}, err
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return models.Gun{}, err
+	}
+	if n == 0 {
+		return models.Gun{}, ErrNotFound
+	}
+	return s.GetGun(ctx, g.ID)
+}
