@@ -11,15 +11,16 @@ import (
 
 type Server struct {
 	categories *services.CategoryService
+	lockers    *services.LockerService
 	pages      map[string]*template.Template
 }
 
-func New(categories *services.CategoryService) (*Server, error) {
-	pages, err := loadPages("categories")
+func New(categories *services.CategoryService, lockers *services.LockerService) (*Server, error) {
+	pages, err := loadPages("categories", "lockers")
 	if err != nil {
 		return nil, err
 	}
-	return &Server{categories: categories, pages: pages}, nil
+	return &Server{categories: categories, lockers: lockers, pages: pages}, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -31,6 +32,8 @@ func (s *Server) Routes() http.Handler {
 	})
 	mux.HandleFunc("GET /categories", s.listCategories)
 	mux.HandleFunc("POST /categories", s.createCategory)
+	mux.HandleFunc("GET /lockers", s.listLockers)
+	mux.HandleFunc("POST /lockers", s.createLocker)
 	return mux
 }
 
@@ -51,6 +54,12 @@ func (s *Server) render(w http.ResponseWriter, page, name string, data any) {
 	if err := s.pages[page].ExecuteTemplate(w, name, data); err != nil {
 		log.Printf("render %s/%s: %v", page, name, err)
 	}
+}
+
+func formError(w http.ResponseWriter, err error) {
+	w.Header().Set("HX-Retarget", "#form-error")
+	w.Header().Set("HX-Reswap", "innerHTML")
+	w.Write([]byte(template.HTMLEscapeString(err.Error())))
 }
 
 func serverError(w http.ResponseWriter, err error) {

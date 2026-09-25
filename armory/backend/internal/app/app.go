@@ -23,8 +23,9 @@ func Run() error {
 
 	store := database.NewStore(db)
 	categories := services.NewCategoryService(store)
+	lockers := services.NewLockerService(store)
 
-	srv, err := httpserver.New(categories)
+	srv, err := httpserver.New(categories, lockers)
 	if err != nil {
 		return err
 	}

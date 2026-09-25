@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"errors"
-	"html/template"
 	"net/http"
 
 	"armory/internal/services"
@@ -23,9 +22,7 @@ func (s *Server) listCategories(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 	c, err := s.categories.Create(r.Context(), r.FormValue("name"))
 	if errors.Is(err, services.ErrNameRequired) || errors.Is(err, services.ErrCategoryExists) {
-		w.Header().Set("HX-Retarget", "#form-error")
-		w.Header().Set("HX-Reswap", "innerHTML")
-		w.Write([]byte(template.HTMLEscapeString(err.Error())))
+		formError(w, err)
 		return
 	}
 	if err != nil {
