@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>Categories</h1>
+
+<form hx-post="/categories" hx-target="#category-rows" hx-swap="beforeend"
+      hx-on::before-request="document.getElementById('form-error').textContent = ''">
+  <input name="name" placeholder="e.g. PISTOL" required>
+  <button type="submit">Add</button>
+  <p id="form-error"></p>
+</form>
+
+<table>
+  <thead><tr><th>Name</th><th>Active</th></tr></thead>
+  <tbody id="category-rows">
+    {{range .Categories}}{{template "category_row" .}}{{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{define "category_row"}}<tr><td>{{.Name}}</td><td>{{if .Active}}yes{{else}}no{{end}}</td></tr>{{end}}

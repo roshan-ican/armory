@@ -1,0 +1,13 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Armory</title>
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <nav><a href="/categories">Categories</a></nav>
+  <main>{{template "content" .}}</main>
+</body>
+</html>{{end}}

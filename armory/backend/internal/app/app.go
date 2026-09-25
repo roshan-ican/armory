@@ -2,10 +2,13 @@ package app
 
 import (
 	"log"
+	"net"
 	"net/http"
 
 	"armory/internal/config"
 	"armory/internal/database"
+	"armory/internal/services"
+	"armory/internal/transport/httpserver"
 )
 
 func Run() error {
@@ -18,11 +21,21 @@ func Run() error {
 	defer db.Close()
 	log.Printf("database ready at %s", cfg.DBPath)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
-	})
+	store := database.NewStore(db)
+	categories := services.NewCategoryService(store)
 
-	log.Printf("listening on %s", cfg.Addr)
-	return http.ListenAndServe(cfg.Addr, mux)
+	srv, err := httpserver.New(categories)
+	if err != nil {
+		return err
+	}
+
+	host, port, err := net.SplitHostPort(cfg.Addr)
+	if err != nil {
+		return err
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	log.Printf("listening on http://%s", net.JoinHostPort(host, port))
+	return http.ListenAndServe(cfg.Addr, srv.Routes())
 }
