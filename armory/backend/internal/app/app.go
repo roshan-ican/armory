@@ -9,6 +9,7 @@ import (
 	"armory/internal/database"
 	"armory/internal/services"
 	"armory/internal/transport/httpserver"
+	"armory/internal/transport/sensor"
 )
 
 func Run() error {
@@ -38,6 +39,11 @@ func Run() error {
 	if host == "" {
 		host = "localhost"
 	}
+	go func() {
+		if err := sensor.Listen(cfg.SensorAddr); err != nil {
+			log.Printf("sensor listener stopped: %v", err)
+		}
+	}()
 	log.Printf("listening on http://%s", net.JoinHostPort(host, port))
 	return http.ListenAndServe(cfg.Addr, srv.Routes())
 }

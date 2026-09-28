@@ -3,14 +3,16 @@ package config
 import "os"
 
 type Config struct {
-	Addr   string
-	DBPath string
+	Addr       string
+	DBPath     string
+	SensorAddr string
 }
 
 func Load() Config {
 	return Config{
-		Addr:   getEnv("ARMORY_ADDR", ":8080"),
-		DBPath: getEnv("ARMORY_DB", "armory.db"),
+		Addr:       getEnv("ARMORY_ADDR", ":8080"),
+		DBPath:     getEnv("ARMORY_DB", "armory.db"),
+		SensorAddr: getEnv("ARMORY_SENSOR_ADDR", ":47810"),
 	}
 }
 
