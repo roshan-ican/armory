@@ -35,7 +35,7 @@ func TestSensorServiceRecord(t *testing.T) {
 	svc := NewSensorService(store)
 
 	t.Run("removes gun in slot 2", func(t *testing.T) {
-		if err := svc.Record(ctx, "10.252.176.50", 2, "gun_removed", "out"); err != nil {
+		if err := svc.Record(ctx, "10.252.176.50", 2, 0, "gun_removed", "out"); err != nil {
 			t.Fatal(err)
 		}
 		g, err := store.GetGun(ctx, gun.ID)
@@ -47,8 +47,21 @@ func TestSensorServiceRecord(t *testing.T) {
 		}
 	})
 
+	t.Run("sync shows fault on slot 2", func(t *testing.T) {
+		if err := svc.Sync(ctx, "10.252.176.50", 2, 2, "sensor_fault", ""); err != nil {
+			t.Fatal(err)
+		}
+		g, err := store.GetGun(ctx, gun.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !g.SensorFault {
+			t.Fatal("want SensorFault after sync with reading 2")
+		}
+	})
+
 	t.Run("unknown board", func(t *testing.T) {
-		err := svc.Record(ctx, "10.252.176.99", 1, "gun_removed", "out")
+		err := svc.Record(ctx, "10.252.176.99", 1, 0, "gun_removed", "out")
 		if !errors.Is(err, database.ErrNotFound) {
 			t.Fatalf("err = %v, want ErrNotFound", err)
 		}

@@ -53,3 +53,8 @@ func (t *Tracker) Update(board string, slots []byte) []Change {
 	return changes
 
 }
+
+func (t *Tracker) Seen(board string) bool {
+	_, ok := t.last[board]
+	return ok
+}

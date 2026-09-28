@@ -14,10 +14,18 @@ func NewSensorService(store *database.Store) *SensorService {
 	return &SensorService{store: store}
 }
 
-func (s *SensorService) Record(ctx context.Context, lockerIP string, slotNo int64, eventType, newStatus string) error {
+func (s *SensorService) Record(ctx context.Context, lockerIP string, slotNo int64, reading byte, eventType, newStatus string) error {
 	slotID, gunID, err := s.store.FindSensorSlot(ctx, lockerIP, slotNo)
 	if err != nil {
 		return err
 	}
-	return s.store.RecordSensorEvent(ctx, slotID, gunID, eventType, newStatus)
+	return s.store.RecordSensorEvent(ctx, slotID, gunID, reading, eventType, newStatus)
+}
+
+func (s *SensorService) Sync(ctx context.Context, lockerIP string, slotNo int64, reading byte, eventType, newStatus string) error {
+	slotID, gunID, err := s.store.FindSensorSlot(ctx, lockerIP, slotNo)
+	if err != nil {
+		return err
+	}
+	return s.store.SyncSensorSlot(ctx, slotID, gunID, reading, eventType, newStatus)
 }

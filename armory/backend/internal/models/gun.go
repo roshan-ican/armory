@@ -11,6 +11,7 @@ type Gun struct {
 	Model        string
 	Notes        string
 	Status       string
+	SensorFault  bool
 }
 
 type FreeSlot struct {

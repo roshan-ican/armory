@@ -13,6 +13,7 @@ go run ./cmd/server
 | Web UI (HTTP)   | `:8080`  | `ARMORY_ADDR`        |
 | Sensor listener | `:47810` | `ARMORY_SENSOR_ADDR` |
 | Database        | `armory.db` | `ARMORY_DB`       |
+| Log every sensor packet | off | `ARMORY_SENSOR_DEBUG=1` |
 
 ## Firewall (Windows)
 

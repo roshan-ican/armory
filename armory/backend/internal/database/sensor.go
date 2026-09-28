@@ -21,7 +21,7 @@ func (s *Store) FindSensorSlot(ctx context.Context, lockerIP string, slotNo int6
 	return slotID, gunID, err
 }
 
-func (s *Store) RecordSensorEvent(ctx context.Context, slotID, gunID int64, eventType, newStatus string) error {
+func (s *Store) RecordSensorEvent(ctx context.Context, slotID, gunID int64, reading byte, eventType, newStatus string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -35,12 +35,56 @@ func (s *Store) RecordSensorEvent(ctx context.Context, slotID, gunID int64, even
 	if err != nil {
 		return err
 	}
+	_, err = tx.ExecContext(ctx,
+		"UPDATE slots SET reading = ?, updated_at = ? WHERE id = ?",
+		reading, ts, slotID)
+	if err != nil {
+		return err
+	}
 	if gunID != 0 && newStatus != "" {
 		_, err = tx.ExecContext(ctx,
 			"UPDATE guns SET status = ?, updated_at = ? WHERE id = ? AND status != 'retired'",
 			newStatus, ts, gunID)
 		if err != nil {
 			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// SyncSensorSlot stores the first reading after startup and logs an event only if the gun's status was wrong.
+func (s *Store) SyncSensorSlot(ctx context.Context, slotID, gunID int64, reading byte, eventType, newStatus string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	ts := now()
+	_, err = tx.ExecContext(ctx,
+		"UPDATE slots SET reading = ?, updated_at = ? WHERE id = ?",
+		reading, ts, slotID)
+	if err != nil {
+		return err
+	}
+	if gunID != 0 && newStatus != "" {
+		res, err := tx.ExecContext(ctx,
+			"UPDATE guns SET status = ?, updated_at = ? WHERE id = ? AND status NOT IN ('retired', ?)",
+			newStatus, ts, gunID, newStatus)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			_, err = tx.ExecContext(ctx,
+				"INSERT INTO events (occurred_at, type, gun_id, slot_id, details) VALUES (?, ?, ?, ?, ?)",
+				ts, eventType, gunID, slotID, "synced from sensor on startup")
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()

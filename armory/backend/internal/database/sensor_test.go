@@ -128,7 +128,7 @@ func TestRecordSensorEventRemovesGun(t *testing.T) {
 	st, locker, gun := setupSensorFixture(t)
 	slotID := locker.Slots[1].ID
 
-	if err := st.RecordSensorEvent(context.Background(), slotID, gun.ID, "gun_removed", "out"); err != nil {
+	if err := st.RecordSensorEvent(context.Background(), slotID, gun.ID, 0, "gun_removed", "out"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,10 +147,10 @@ func TestRecordSensorEventReturnsGun(t *testing.T) {
 	ctx := context.Background()
 	slotID := locker.Slots[1].ID
 
-	if err := st.RecordSensorEvent(ctx, slotID, gun.ID, "gun_removed", "out"); err != nil {
+	if err := st.RecordSensorEvent(ctx, slotID, gun.ID, 0, "gun_removed", "out"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.RecordSensorEvent(ctx, slotID, gun.ID, "gun_returned", "in"); err != nil {
+	if err := st.RecordSensorEvent(ctx, slotID, gun.ID, 1, "gun_returned", "in"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,7 +165,7 @@ func TestRecordSensorEventReturnsGun(t *testing.T) {
 func TestRecordSensorEventFaultKeepsStatus(t *testing.T) {
 	st, locker, gun := setupSensorFixture(t)
 
-	if err := st.RecordSensorEvent(context.Background(), locker.Slots[1].ID, gun.ID, "sensor_fault", ""); err != nil {
+	if err := st.RecordSensorEvent(context.Background(), locker.Slots[1].ID, gun.ID, 2, "sensor_fault", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +181,7 @@ func TestRecordSensorEventEmptySlot(t *testing.T) {
 	st, locker, _ := setupSensorFixture(t)
 	slotID := locker.Slots[0].ID
 
-	if err := st.RecordSensorEvent(context.Background(), slotID, 0, "gun_returned", "in"); err != nil {
+	if err := st.RecordSensorEvent(context.Background(), slotID, 0, 1, "gun_returned", "in"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,7 +199,7 @@ func TestRecordSensorEventRetiredGunUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := st.RecordSensorEvent(ctx, locker.Slots[1].ID, gun.ID, "gun_returned", "in"); err != nil {
+	if err := st.RecordSensorEvent(ctx, locker.Slots[1].ID, gun.ID, 1, "gun_returned", "in"); err != nil {
 		t.Fatal(err)
 	}
 	if s := gunStatus(t, st, gun.ID); s != "retired" {
@@ -210,7 +210,7 @@ func TestRecordSensorEventRetiredGunUntouched(t *testing.T) {
 func TestRecordSensorEventRollsBackOnError(t *testing.T) {
 	st, _, gun := setupSensorFixture(t)
 
-	err := st.RecordSensorEvent(context.Background(), 9999, gun.ID, "gun_removed", "out")
+	err := st.RecordSensorEvent(context.Background(), 9999, gun.ID, 0, "gun_removed", "out")
 	if err == nil {
 		t.Fatal("want error for unknown slot, got nil")
 	}
@@ -219,5 +219,120 @@ func TestRecordSensorEventRollsBackOnError(t *testing.T) {
 	}
 	if s := gunStatus(t, st, gun.ID); s != "in" {
 		t.Fatalf("gun status = %q, want in", s)
+	}
+}
+
+func sensorFault(t *testing.T, st *Store, id int64) bool {
+	t.Helper()
+	g, err := st.GetGun(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g.SensorFault
+}
+
+func TestRecordSensorEventFaultFlagsGun(t *testing.T) {
+	st, locker, gun := setupSensorFixture(t)
+	ctx := context.Background()
+	slotID := locker.Slots[1].ID
+
+	if sensorFault(t, st, gun.ID) {
+		t.Fatal("new gun should not show a sensor fault")
+	}
+	if err := st.RecordSensorEvent(ctx, slotID, gun.ID, 2, "sensor_fault", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !sensorFault(t, st, gun.ID) {
+		t.Fatal("want sensor fault after reading 2")
+	}
+	if err := st.RecordSensorEvent(ctx, slotID, gun.ID, 1, "sensor_recovered", "in"); err != nil {
+		t.Fatal(err)
+	}
+	if sensorFault(t, st, gun.ID) {
+		t.Fatal("fault should clear after sensor recovers")
+	}
+}
+
+func TestSyncSensorSlotFaultShowsWithoutEvent(t *testing.T) {
+	st, locker, gun := setupSensorFixture(t)
+
+	if err := st.SyncSensorSlot(context.Background(), locker.Slots[1].ID, gun.ID, 2, "sensor_fault", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !sensorFault(t, st, gun.ID) {
+		t.Fatal("want sensor fault after sync with reading 2")
+	}
+	if s := gunStatus(t, st, gun.ID); s != "in" {
+		t.Fatalf("gun status = %q, want in", s)
+	}
+	if n := len(listEvents(t, st)); n != 0 {
+		t.Fatalf("got %d events, want 0", n)
+	}
+}
+
+func TestSyncSensorSlotFixesStaleStatus(t *testing.T) {
+	st, locker, gun := setupSensorFixture(t)
+	slotID := locker.Slots[1].ID
+
+	if err := st.SyncSensorSlot(context.Background(), slotID, gun.ID, 0, "gun_removed", "out"); err != nil {
+		t.Fatal(err)
+	}
+	if s := gunStatus(t, st, gun.ID); s != "out" {
+		t.Fatalf("gun status = %q, want out", s)
+	}
+	events := listEvents(t, st)
+	want := eventRow{typ: "gun_removed", gunID: gun.ID, slotID: slotID}
+	if len(events) != 1 || events[0] != want {
+		t.Fatalf("events = %+v, want [%+v]", events, want)
+	}
+}
+
+func TestSyncSensorSlotMatchingStatusNoEvent(t *testing.T) {
+	st, locker, gun := setupSensorFixture(t)
+
+	if err := st.SyncSensorSlot(context.Background(), locker.Slots[1].ID, gun.ID, 1, "gun_returned", "in"); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(listEvents(t, st)); n != 0 {
+		t.Fatalf("got %d events, want 0 when status already matches", n)
+	}
+}
+
+func TestSyncSensorSlotRetiredGunUntouched(t *testing.T) {
+	st, locker, gun := setupSensorFixture(t)
+	ctx := context.Background()
+	if _, err := st.RetireGun(ctx, gun.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SyncSensorSlot(ctx, locker.Slots[1].ID, gun.ID, 0, "gun_removed", "out"); err != nil {
+		t.Fatal(err)
+	}
+	if s := gunStatus(t, st, gun.ID); s != "retired" {
+		t.Fatalf("gun status = %q, want retired", s)
+	}
+}
+
+func TestOpenAddsReadingToOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("ALTER TABLE slots DROP COLUMN reading"); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	db, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('slots') WHERE name = 'reading'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatal("reading column was not added to existing database")
 	}
 }

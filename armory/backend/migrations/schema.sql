@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS slots (
     locker_id  INTEGER NOT NULL REFERENCES lockers (id),
     slot_no    INTEGER NOT NULL CHECK (slot_no BETWEEN 1 AND 5),
     sensor_id  INTEGER NOT NULL UNIQUE,
+    reading    INTEGER CHECK (reading IN (0, 1, 2)),
     active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     created_at TEXT    NOT NULL,
     updated_at TEXT    NOT NULL,

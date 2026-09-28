@@ -116,3 +116,14 @@ func TestTrackerBoardsAreSeparate(t *testing.T) {
 		t.Fatalf("board A affected by board B: %v", got)
 	}
 }
+
+func TestTrackerSeen(t *testing.T) {
+	tr := NewTracker()
+	if tr.Seen(board) {
+		t.Fatal("new tracker should not have seen the board")
+	}
+	tr.Update(board, []byte{1, 1, 1})
+	if !tr.Seen(board) {
+		t.Fatal("board should be seen after first packet")
+	}
+}

@@ -12,7 +12,8 @@ import (
 const gunSelect = `
  SELECT g.id, COALESCE(g.slot_id, 0), g.category_id, c.name,
 	COALESCE(l.name, ''), COALESCE(s.slot_no, 0),
-	g.serial, COALESCE(g.model, ''), COALESCE(g.notes, ''), g.status
+	g.serial, COALESCE(g.model, ''), COALESCE(g.notes, ''), g.status,
+	COALESCE(s.reading, 0) = 2
 FROM guns g
 JOIN categories c ON c.id = g.category_id
 LEFT JOIN slots s ON s.id = g.slot_id
@@ -36,6 +37,7 @@ func scanGun(row scanner) (models.Gun, error) {
 		&g.Model,
 		&g.Notes,
 		&g.Status,
+		&g.SensorFault,
 	)
 	return g, err
 }
