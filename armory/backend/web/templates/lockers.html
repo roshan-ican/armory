@@ -1,11 +1,10 @@
 {{define "content"}}
 <div class="page-heading">
   <div>
-    <p class="eyebrow">Infrastructure</p>
-    <h1>Storage lockers</h1>
-    <p>Monitor secure cabinets, network details, and slot availability.</p>
+    <h1>Lockers</h1>
+    <p>Cabinets, their network address, and their slots.</p>
   </div>
-  <span class="record-count">{{len .Lockers}} lockers</span>
+  <span class="record-count">{{len .Lockers}} total</span>
 </div>
 <form
   class="panel create-form"
@@ -16,15 +15,15 @@
 >
   <div class="panel-heading">
     <div>
-      <h2>Add storage locker</h2>
-      <p>Register a cabinet and its network endpoint.</p>
+      <h2>Add locker</h2>
+      <p>The IP must match the sensor board.</p>
     </div>
   </div>
   <div class="form-grid">
-    <input name="name" placeholder="Name, e.g. Locker 1" required /><input
+    <input name="name" placeholder="Name" required /><input
       name="location"
-      placeholder="Location (optional)"
-    /><input name="ip_address" placeholder="IP address (optional)" /><button
+      placeholder="Location"
+    /><input name="ip_address" placeholder="IP address" /><button
       class="button-primary"
       type="submit"
     >
@@ -39,29 +38,26 @@
 {{end}} {{define "locker_card"}}
 <section class="panel locker-card">
   <div class="locker-heading">
-    <div>
-      <p class="eyebrow">Secure cabinet</p>
-      <h2>{{.Name}}</h2>
-    </div>
+    <h2>{{.Name}}</h2>
     <span class="status status-in"><i></i>Active</span>
   </div>
   <p class="locker-meta">
     <span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span
-    ><span>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP set{{end}}</span>
+    ><code>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP{{end}}</code>
   </p>
   <div class="table-scroll">
     <table>
       <thead>
         <tr>
           <th>Slot</th>
-          <th>Sensor ID</th>
+          <th>Sensor</th>
           <th>State</th>
         </tr>
       </thead>
       <tbody>
         {{range .Slots}}
         <tr>
-          <td><strong>#{{.SlotNo}}</strong></td>
+          <td>{{.SlotNo}}</td>
           <td><code>{{.SensorID}}</code></td>
           <td>
             <span

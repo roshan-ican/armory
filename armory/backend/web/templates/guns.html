@@ -1,11 +1,10 @@
 {{define "content"}}
 <div class="page-heading">
   <div>
-    <p class="eyebrow">Inventory</p>
     <h1>Firearms</h1>
-    <p>Register, locate, and manage secured firearms.</p>
+    <p>Every registered firearm and where it is.</p>
   </div>
-  <span class="record-count">{{len .Guns}} records</span>
+  <span class="record-count">{{len .Guns}} total</span>
 </div>
 <form
   class="panel create-form"
@@ -16,31 +15,31 @@
 >
   <div class="panel-heading">
     <div>
-      <h2>Register firearm</h2>
-      <p>Assign a firearm to an available locker slot.</p>
+      <h2>Register</h2>
+      <p>Assign a firearm to a free slot.</p>
     </div>
   </div>
   <div class="form-grid form-grid-wide">
     <select name="category_id" required>
-      <option value="">Select category…</option>
+      <option value="">Category</option>
       {{range .Categories}}{{if .Active}}
       <option value="{{.ID}}">{{.Name}}</option>
       {{end}}{{end}}
     </select>
     <select name="slot_id" required>
-      <option value="">Select storage slot…</option>
+      <option value="">Slot</option>
       {{range .FreeSlots}}
       <option value="{{.ID}}">{{.LockerName}} · slot {{.SlotNo}}</option>
       {{end}}
     </select>
     <input name="serial" placeholder="Serial number" required /><input
       name="model"
-      placeholder="Model (optional)"
-    /><input name="notes" placeholder="Notes (optional)" /><button
+      placeholder="Model"
+    /><input name="notes" placeholder="Notes" /><button
       class="button-primary"
       type="submit"
     >
-      Register firearm
+      Register
     </button>
   </div>
   <p id="form-error" class="form-error" role="alert"></p>
@@ -48,8 +47,7 @@
 <div class="panel table-panel">
   <div class="panel-heading">
     <div>
-      <h2>Inventory register</h2>
-      <p>Current assignment and lifecycle status.</p>
+      <h2>Inventory</h2>
     </div>
   </div>
   <div class="table-scroll">
@@ -75,16 +73,20 @@
 <tr>
   <td>{{.Serial}}</td>
   <td>{{.CategoryName}}</td>
-  <td>{{if .Model}}{{.Model}}{{else}}—{{end}}</td>
+  <td>{{if .Model}}{{.Model}}{{else}}<span class="muted">—</span>{{end}}</td>
   <td>
     {{if .LockerName}}<span class="location"
       >{{.LockerName}} <small>Slot {{.SlotNo}}</small></span
-    >{{else}}—{{end}}
+    >{{else}}<span class="muted">—</span>{{end}}
   </td>
   <td>
-    <span class="status status-{{.Status}}"><i></i>{{.Status}}</span>
+    {{if and .SensorFault (ne .Status "retired")}}<span
+      class="status status-fault"
+      title="Slot sensor reports a fault; last known status: {{.Status}}"
+      ><i></i>Sensor fault</span
+    >{{else}}{{template "gun_status" .Status}}{{end}}
   </td>
-  <td class="notes-cell">{{if .Notes}}{{.Notes}}{{else}}—{{end}}</td>
+  <td class="notes-cell">{{if .Notes}}{{.Notes}}{{else}}<span class="muted">—</span>{{end}}</td>
   <td class="row-actions">
     {{if eq .Status "in"}}<button
       class="button-secondary"
@@ -128,9 +130,7 @@
       {{end}}
     </select>
   </td>
-  <td>
-    <span class="status status-{{.Gun.Status}}"><i></i>{{.Gun.Status}}</span>
-  </td>
+  <td>{{template "gun_status" .Gun.Status}}</td>
   <td><input name="notes" value="{{.Gun.Notes}}" /></td>
   <td class="row-actions">
     <button
@@ -152,3 +152,7 @@
   </td>
 </tr>
 {{end}}
+
+{{define "gun_status"}}<span class="status status-{{.}}"
+  ><i></i>{{if eq . "in"}}In{{else if eq . "out"}}Out{{else if eq . "retired"}}Retired{{else}}{{.}}{{end}}</span
+>{{end}}
