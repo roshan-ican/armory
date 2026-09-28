@@ -63,14 +63,24 @@
           <th><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
-      <tbody id="gun-rows">
+      <tbody
+        id="gun-rows"
+        class="live-region"
+        hx-get="/guns"
+        hx-trigger="armory:changed[!document.querySelector('.editing-row')] from:body"
+        hx-select="#gun-rows"
+        hx-swap="outerHTML"
+      >
         {{range .Guns}}{{template "gun_row" .}}{{end}}
       </tbody>
     </table>
   </div>
 </div>
 {{end}} {{define "gun_row"}}
-<tr>
+<tr
+  id="gun-{{.ID}}"
+  data-live="{{if and .SensorFault (ne .Status "retired")}}fault{{else}}{{.Status}}{{end}}"
+>
   <td>{{.Serial}}</td>
   <td>{{.CategoryName}}</td>
   <td>{{if .Model}}{{.Model}}{{else}}<span class="muted">—</span>{{end}}</td>

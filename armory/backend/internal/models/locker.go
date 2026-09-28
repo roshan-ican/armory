@@ -14,4 +14,5 @@ type Slot struct {
 	SlotNo   int64
 	SensorID int64
 	Active   bool
+	Reading  int64
 }

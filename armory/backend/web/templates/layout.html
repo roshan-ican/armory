@@ -10,7 +10,36 @@
       <a href="/lockers" {{if eq .Title "Lockers"}}class="active" aria-current="page"{{end}}>Lockers</a>
       <a href="/categories" {{if eq .Title "Categories"}}class="active" aria-current="page"{{end}}>Categories</a>
     </nav>
-    <span class="system-status"><i></i>Online</span>
+    <span class="system-status"><i></i><span class="when-online">Live</span><span class="when-offline">Reconnecting…</span></span>
   </header>
   <main>{{template "content" .}}</main>
+  <script>
+    (() => {
+      const refresh = () => htmx.trigger(document.body, "armory:changed");
+      let before = {};
+      document.addEventListener("htmx:beforeSwap", () => {
+        before = {};
+        document.querySelectorAll("[data-live]").forEach((el) => (before[el.id] = el.dataset.live));
+      });
+      document.addEventListener("htmx:afterSettle", () => {
+        document.querySelectorAll("[data-live]").forEach((el) => {
+          if (el.id in before && before[el.id] !== el.dataset.live) {
+            el.classList.remove("flash");
+            void el.offsetWidth;
+            el.classList.add("flash");
+          }
+        });
+      });
+      const status = document.querySelector(".system-status");
+      let opened = false;
+      const events = new EventSource("/events");
+      events.onmessage = refresh;
+      events.onopen = () => {
+        status.classList.remove("offline");
+        if (opened) refresh();
+        opened = true;
+      };
+      events.onerror = () => status.classList.add("offline");
+    })();
+  </script>
 </body></html>{{end}}

@@ -32,14 +32,20 @@
   </div>
   <p id="form-error" class="form-error" role="alert"></p>
 </form>
-<div id="locker-list" class="locker-grid">
+<div
+  id="locker-list"
+  class="locker-grid live-region"
+  hx-get="/lockers"
+  hx-trigger="armory:changed from:body"
+  hx-select="#locker-list"
+  hx-swap="outerHTML"
+>
   {{range .Lockers}}{{template "locker_card" .}}{{end}}
 </div>
 {{end}} {{define "locker_card"}}
 <section class="panel locker-card">
   <div class="locker-heading">
     <h2>{{.Name}}</h2>
-    <span class="status status-in"><i></i>Active</span>
   </div>
   <p class="locker-meta">
     <span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span
@@ -51,19 +57,20 @@
         <tr>
           <th>Slot</th>
           <th>Sensor</th>
-          <th>State</th>
         </tr>
       </thead>
       <tbody>
         {{range .Slots}}
-        <tr>
+        <tr id="slot-{{.ID}}" data-live="{{.Reading}}">
           <td>{{.SlotNo}}</td>
-          <td><code>{{.SensorID}}</code></td>
           <td>
-            <span
-              class="status {{if .Active}}status-in{{else}}status-retired{{end}}"
-              ><i></i>{{if .Active}}Active{{else}}Inactive{{end}}</span
-            >
+            {{if eq .Reading 1}}<span class="status status-in"
+              ><i></i>Gun present</span
+            >{{else if eq .Reading 0}}<span class="status status-out"
+              ><i></i>Empty</span
+            >{{else if eq .Reading 2}}<span class="status status-fault"
+              ><i></i>Fault</span
+            >{{else}}<span class="muted">No data</span>{{end}}
           </td>
         </tr>
         {{end}}

@@ -32,7 +32,7 @@ func TestSensorServiceRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svc := NewSensorService(store)
+	svc := NewSensorService(store, nil)
 
 	t.Run("removes gun in slot 2", func(t *testing.T) {
 		if err := svc.Record(ctx, "10.252.176.50", 2, 0, "gun_removed", "out"); err != nil {

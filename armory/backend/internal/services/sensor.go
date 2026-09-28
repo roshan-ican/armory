@@ -4,14 +4,16 @@ import (
 	"context"
 
 	"armory/internal/database"
+	"armory/internal/live"
 )
 
 type SensorService struct {
 	store *database.Store
+	hub   *live.Hub
 }
 
-func NewSensorService(store *database.Store) *SensorService {
-	return &SensorService{store: store}
+func NewSensorService(store *database.Store, hub *live.Hub) *SensorService {
+	return &SensorService{store: store, hub: hub}
 }
 
 func (s *SensorService) Record(ctx context.Context, lockerIP string, slotNo int64, reading byte, eventType, newStatus string) error {
@@ -19,7 +21,11 @@ func (s *SensorService) Record(ctx context.Context, lockerIP string, slotNo int6
 	if err != nil {
 		return err
 	}
-	return s.store.RecordSensorEvent(ctx, slotID, gunID, reading, eventType, newStatus)
+	if err := s.store.RecordSensorEvent(ctx, slotID, gunID, reading, eventType, newStatus); err != nil {
+		return err
+	}
+	s.hub.Publish()
+	return nil
 }
 
 func (s *SensorService) Sync(ctx context.Context, lockerIP string, slotNo int64, reading byte, eventType, newStatus string) error {
@@ -27,5 +33,9 @@ func (s *SensorService) Sync(ctx context.Context, lockerIP string, slotNo int64,
 	if err != nil {
 		return err
 	}
-	return s.store.SyncSensorSlot(ctx, slotID, gunID, reading, eventType, newStatus)
+	if err := s.store.SyncSensorSlot(ctx, slotID, gunID, reading, eventType, newStatus); err != nil {
+		return err
+	}
+	s.hub.Publish()
+	return nil
 }

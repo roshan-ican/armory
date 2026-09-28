@@ -40,7 +40,7 @@ func (s *Store) ListLockers(ctx context.Context) ([]models.Locker, error) {
 
 func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, locker_id, slot_no, sensor_id, active FROM slots ORDER BY locker_id, slot_no")
+		"SELECT id, locker_id, slot_no, sensor_id, active, COALESCE(reading, -1) FROM slots ORDER BY locker_id, slot_no")
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) 
 	slots := make(map[int64][]models.Slot)
 	for rows.Next() {
 		var sl models.Slot
-		if err := rows.Scan(&sl.ID, &sl.LockerID, &sl.SlotNo, &sl.SensorID, &sl.Active); err != nil {
+		if err := rows.Scan(&sl.ID, &sl.LockerID, &sl.SlotNo, &sl.SensorID, &sl.Active, &sl.Reading); err != nil {
 			return nil, err
 		}
 		slots[sl.LockerID] = append(slots[sl.LockerID], sl)
@@ -94,7 +94,7 @@ func (s *Store) CreateLocker(ctx context.Context, l models.Locker) (models.Locke
 			return models.Locker{}, err
 		}
 		l.Slots = append(l.Slots, models.Slot{
-			ID: slotID, LockerID: l.ID, SlotNo: slotNo, SensorID: sensorID, Active: true,
+			ID: slotID, LockerID: l.ID, SlotNo: slotNo, SensorID: sensorID, Active: true, Reading: -1,
 		})
 	}
 

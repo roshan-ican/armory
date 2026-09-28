@@ -7,6 +7,7 @@ import (
 
 	"armory/internal/config"
 	"armory/internal/database"
+	"armory/internal/live"
 	"armory/internal/services"
 	"armory/internal/transport/httpserver"
 	"armory/internal/transport/sensor"
@@ -26,9 +27,10 @@ func Run() error {
 	categories := services.NewCategoryService(store)
 	lockers := services.NewLockerService(store)
 	guns := services.NewGunService(store)
-	sensors := services.NewSensorService(store)
+	hub := live.NewHub()
+	sensors := services.NewSensorService(store, hub)
 
-	srv, err := httpserver.New(categories, lockers, guns)
+	srv, err := httpserver.New(categories, lockers, guns, hub)
 	if err != nil {
 		return err
 	}

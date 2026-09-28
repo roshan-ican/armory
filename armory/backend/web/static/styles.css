@@ -15,6 +15,7 @@
   --red: #d70015;
   --red-soft: rgba(255, 59, 48, 0.1);
   --bar: rgba(245, 245, 247, 0.72);
+  --flash: rgba(255, 204, 0, 0.35);
   --radius: 14px;
   --radius-control: 10px;
   font-family:
@@ -44,6 +45,7 @@
     --red: #ff453a;
     --red-soft: rgba(255, 69, 58, 0.14);
     --bar: rgba(22, 22, 23, 0.72);
+    --flash: rgba(255, 214, 10, 0.28);
   }
 }
 * {
@@ -127,6 +129,17 @@ a {
   height: 6px;
   border-radius: 50%;
   background: var(--green);
+  transition: background 300ms ease;
+}
+.system-status .when-offline,
+.system-status.offline .when-online {
+  display: none;
+}
+.system-status.offline .when-offline {
+  display: inline;
+}
+.system-status.offline i {
+  background: var(--tertiary);
 }
 
 main {
@@ -414,6 +427,21 @@ code {
 .htmx-request {
   opacity: 0.6;
   cursor: progress;
+}
+.live-region.htmx-request {
+  opacity: 1;
+  cursor: auto;
+}
+@keyframes flash {
+  from {
+    background: var(--flash);
+  }
+  to {
+    background: transparent;
+  }
+}
+tr.flash {
+  animation: flash 1.8s cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (max-width: 1000px) {

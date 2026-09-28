@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"armory/internal/live"
 	"armory/internal/services"
 	"armory/web"
 )
@@ -13,20 +14,22 @@ type Server struct {
 	categories *services.CategoryService
 	lockers    *services.LockerService
 	guns       *services.GunService
+	hub        *live.Hub
 	pages      map[string]*template.Template
 }
 
-func New(categories *services.CategoryService, lockers *services.LockerService, guns *services.GunService) (*Server, error) {
+func New(categories *services.CategoryService, lockers *services.LockerService, guns *services.GunService, hub *live.Hub) (*Server, error) {
 	pages, err := loadPages("categories", "lockers", "guns")
 	if err != nil {
 		return nil, err
 	}
-	return &Server{categories: categories, lockers: lockers, guns: guns, pages: pages}, nil
+	return &Server{categories: categories, lockers: lockers, guns: guns, hub: hub, pages: pages}, nil
 }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /events", s.events)
 	mux.Handle("GET /static/", http.FileServerFS(web.FS))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/guns", http.StatusSeeOther)
