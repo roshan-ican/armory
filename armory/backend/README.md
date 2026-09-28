@@ -37,3 +37,16 @@ netsh advfirewall firewall delete rule name="Armory sensor UDP"
 ```
 
 If `ARMORY_SENSOR_ADDR` is changed, use the same port in these commands.
+
+## Sensor packet
+
+One UDP datagram per locker, raw bytes:
+
+```
+24  s0  s1  ...  sN  crc  23
+$   slot states       sum  #
+```
+
+- Slot state: `00` gun taken, `01` gun present, `02` fault
+- `crc` = CRC-8/MAXIM (poly 0x8C reflected, init 0) over the 3 slot bytes
+- Examples from the board: `24 02 02 00 de 23`, `24 02 00 01 11 23`

@@ -21,6 +21,11 @@ func Listen(addr string) error {
 			log.Printf("sensor read: %v", err)
 			continue
 		}
-		log.Printf("from %s: % x", from, buf[:n])
+		slots, err := decodeSensorFrame(buf[:n])
+		if err != nil {
+			log.Printf("from %s: dropped % x: %v", from, buf[:n], err)
+			continue
+		}
+		log.Printf("from %s: slots %v", from, slots)
 	}
 }
