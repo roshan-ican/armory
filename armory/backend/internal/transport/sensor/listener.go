@@ -11,6 +11,7 @@ func Listen(addr string) error {
 		return err
 	}
 	defer conn.Close()
+	tracker := NewTracker()
 
 	log.Printf("sensor listening on udp %s", addr)
 
@@ -26,6 +27,9 @@ func Listen(addr string) error {
 			log.Printf("from %s: dropped % x: %v", from, buf[:n], err)
 			continue
 		}
-		log.Printf("from %s: slots %v", from, slots)
+		board := from.(*net.UDPAddr).IP.String()
+		for _, c := range tracker.Update(board, slots) {
+			log.Printf("board %s slot %d: %d -> %d", board, c.Slot, c.From, c.To)
+		}
 	}
 }
