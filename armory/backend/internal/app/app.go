@@ -26,6 +26,7 @@ func Run() error {
 	categories := services.NewCategoryService(store)
 	lockers := services.NewLockerService(store)
 	guns := services.NewGunService(store)
+	sensors := services.NewSensorService(store)
 
 	srv, err := httpserver.New(categories, lockers, guns)
 	if err != nil {
@@ -40,7 +41,7 @@ func Run() error {
 		host = "localhost"
 	}
 	go func() {
-		if err := sensor.Listen(cfg.SensorAddr); err != nil {
+		if err := sensor.Listen(cfg.SensorAddr, sensors); err != nil {
 			log.Printf("sensor listener stopped: %v", err)
 		}
 	}()
