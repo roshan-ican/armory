@@ -13,6 +13,7 @@
   --on-accent: #ffffff;
   --green: #248a3d;
   --red: #d70015;
+  --yellow: #d68a00;
   --red-soft: rgba(255, 59, 48, 0.1);
   --bar: rgba(245, 245, 247, 0.72);
   --flash: rgba(255, 204, 0, 0.35);
@@ -43,6 +44,7 @@
     --accent-soft: rgba(10, 132, 255, 0.18);
     --green: #30d158;
     --red: #ff453a;
+    --yellow: #ffd60a;
     --red-soft: rgba(255, 69, 58, 0.14);
     --bar: rgba(22, 22, 23, 0.72);
     --flash: rgba(255, 214, 10, 0.28);
@@ -234,6 +236,18 @@ select {
   background-repeat: no-repeat;
   background-position: right 12px center;
 }
+select option {
+  background: var(--surface);
+  color: var(--text);
+}
+select option:disabled {
+  color: var(--tertiary);
+}
+select:focus,
+select:active {
+  background-color: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent);
+}
 input::placeholder {
   color: var(--tertiary);
 }
@@ -378,6 +392,19 @@ td select {
 .status-fault {
   color: var(--red);
 }
+.status-detecting {
+  color: var(--yellow);
+}
+.status-taken {
+  color: var(--red);
+}
+.status-returned {
+  color: var(--green);
+}
+td small {
+  margin-left: 8px;
+  font-size: 0.75rem;
+}
 
 .locker-grid {
   display: grid;
@@ -402,6 +429,147 @@ td select {
   padding: 0 20px 14px;
   color: var(--secondary);
   font-size: 0.8125rem;
+}
+.slot-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 20px 34px;
+}
+.slot {
+  --tone: var(--tertiary);
+  --shape: url("/static/rifle.svg");
+  --len: 180px;
+  --thick: 48px;
+  position: relative;
+  flex: none;
+  width: var(--thick);
+  height: var(--len);
+  color: transparent;
+}
+.slot::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--len);
+  height: var(--thick);
+  background: var(--tone);
+  transform: translate(-50%, -50%) rotate(-90deg);
+  -webkit-mask: var(--shape) center / contain no-repeat;
+  mask: var(--shape) center / contain no-repeat;
+  transition: background 300ms ease;
+}
+.slot > span {
+  position: absolute;
+  bottom: -18px;
+  left: 0;
+  right: 0;
+  color: var(--secondary);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+.slot::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 5;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+.slot:hover::after {
+  opacity: 1;
+  transform: translate(-50%, -2px);
+}
+.slot-row-pistol .slot {
+  --shape: url("/static/pistol.svg");
+  --len: 130px;
+  --thick: 74px;
+}
+.slot-row-pistol .slot::before {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.slot-in {
+  --tone: var(--green);
+}
+.slot-out {
+  --tone: var(--red);
+}
+.slot-detecting {
+  --tone: var(--yellow);
+}
+.slot-fault {
+  --tone: var(--tertiary);
+}
+.slot-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 20px 16px;
+  color: var(--secondary);
+  font-size: 0.75rem;
+}
+.slot-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.slot-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+.slot.flash::before {
+  animation: slot-flash 1.8s cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes slot-flash {
+  from {
+    filter: drop-shadow(0 0 6px var(--flash));
+  }
+  to {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+.locker-edit {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 8px 20px 20px;
+}
+.locker-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--secondary);
+  font-size: 0.75rem;
+}
+.locker-edit input,
+.locker-edit select {
+  width: 100%;
+}
+.locker-edit-actions,
+.locker-edit .form-error {
+  grid-column: 1 / -1;
+}
+.locker-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+.locker-edit .form-error {
+  margin: 0;
 }
 code {
   color: var(--secondary);

@@ -1,14 +1,10 @@
-CREATE TABLE IF NOT EXISTS categories (
-    id         INTEGER PRIMARY KEY,
-    name       TEXT    NOT NULL UNIQUE,
-    active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
-) STRICT;
-
 CREATE TABLE IF NOT EXISTS lockers (
     id         INTEGER PRIMARY KEY,
     name       TEXT    NOT NULL UNIQUE,
     location   TEXT,
-    ip_address TEXT
+    ip_address TEXT,
+    kind       TEXT    NOT NULL DEFAULT 'rifle' CHECK (kind IN ('rifle', 'pistol')),
+    capacity   INTEGER NOT NULL DEFAULT 5 CHECK (capacity BETWEEN 1 AND 5)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -33,18 +29,6 @@ CREATE TABLE IF NOT EXISTS slots (
     UNIQUE (locker_id, slot_no)
 ) STRICT;
 
-CREATE TABLE IF NOT EXISTS guns (
-    id          INTEGER PRIMARY KEY,
-    slot_id     INTEGER UNIQUE REFERENCES slots (id),
-    category_id INTEGER NOT NULL REFERENCES categories (id),
-    serial      TEXT    NOT NULL UNIQUE,
-    model       TEXT,
-    notes       TEXT,
-    status      TEXT    NOT NULL DEFAULT 'in' CHECK (status IN ('in', 'out', 'retired')),
-    created_at  TEXT    NOT NULL,
-    updated_at  TEXT    NOT NULL
-) STRICT;
-
 CREATE TABLE IF NOT EXISTS face_enrollments (
     id            INTEGER PRIMARY KEY,
     user_id       INTEGER NOT NULL REFERENCES users (id),
@@ -58,8 +42,8 @@ CREATE TABLE IF NOT EXISTS face_enrollments (
 CREATE TABLE IF NOT EXISTS requests (
     id                 INTEGER PRIMARY KEY,
     requester_id       INTEGER NOT NULL REFERENCES users (id),
-    category_id        INTEGER REFERENCES categories (id),
-    gun_id             INTEGER REFERENCES guns (id),
+    kind               TEXT CHECK (kind IN ('pistol', 'rifle')),
+    slot_id            INTEGER REFERENCES slots (id),
     status             TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'collected', 'returned', 'expired', 'cancelled')),
     reason             TEXT,
     admin_note         TEXT,
@@ -77,7 +61,6 @@ CREATE TABLE IF NOT EXISTS events (
     occurred_at TEXT    NOT NULL,
     type        TEXT    NOT NULL,
     user_id     INTEGER REFERENCES users (id),
-    gun_id      INTEGER REFERENCES guns (id),
     slot_id     INTEGER REFERENCES slots (id),
     request_id  INTEGER REFERENCES requests (id),
     details     TEXT

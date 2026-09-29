@@ -24,13 +24,12 @@ func Run() error {
 	log.Printf("database ready at %s", cfg.DBPath)
 
 	store := database.NewStore(db)
-	categories := services.NewCategoryService(store)
 	lockers := services.NewLockerService(store)
-	guns := services.NewGunService(store)
+	activity := services.NewActivityService(store)
 	hub := live.NewHub()
 	sensors := services.NewSensorService(store, hub)
 
-	srv, err := httpserver.New(categories, lockers, guns, hub)
+	srv, err := httpserver.New(lockers, activity, hub)
 	if err != nil {
 		return err
 	}

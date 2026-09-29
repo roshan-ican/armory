@@ -1,10 +1,11 @@
 package httpserver
 
 import (
+	"armory/internal/models"
+	"armory/internal/services"
 	"errors"
 	"net/http"
-
-	"armory/internal/services"
+	"strconv"
 )
 
 func (s *Server) listLockers(w http.ResponseWriter, r *http.Request) {
@@ -20,11 +21,19 @@ func (s *Server) listLockers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createLocker(w http.ResponseWriter, r *http.Request) {
+	capacity, err := strconv.ParseInt(r.FormValue("capacity"), 10, 64)
+	if err != nil {
+		formError(w, services.ErrInvalidCapacity)
+		return
+	}
 	l, err := s.lockers.Create(r.Context(),
-		r.FormValue("name"), r.FormValue("location"), r.FormValue("ip_address"))
+		r.FormValue("name"), r.FormValue("location"), r.FormValue("ip_address"),
+		r.FormValue("kind"), capacity)
 	if errors.Is(err, services.ErrNameRequired) ||
 		errors.Is(err, services.ErrLockerExists) ||
-		errors.Is(err, services.ErrInvalidIP) {
+		errors.Is(err, services.ErrInvalidIP) ||
+		errors.Is(err, services.ErrInvalidKind) ||
+		errors.Is(err, services.ErrInvalidCapacity) {
 		formError(w, err)
 		return
 	}
@@ -32,5 +41,70 @@ func (s *Server) createLocker(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	s.render(w, "lockers", "locker_card", l)
+}
+
+func (s *Server) lockerFor(w http.ResponseWriter, r *http.Request) (models.Locker, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return models.Locker{}, false
+	}
+	l, err := s.lockers.Get(r.Context(), id)
+	if errors.Is(err, services.ErrLockerNotFound) {
+		http.NotFound(w, r)
+		return models.Locker{}, false
+	}
+	if err != nil {
+		serverError(w, err)
+		return models.Locker{}, false
+	}
+	return l, true
+}
+
+func (s *Server) lockerCard(w http.ResponseWriter, r *http.Request) {
+	if l, ok := s.lockerFor(w, r); ok {
+		s.render(w, "lockers", "locker_card", l)
+	}
+}
+
+func (s *Server) editLocker(w http.ResponseWriter, r *http.Request) {
+	if l, ok := s.lockerFor(w, r); ok {
+		s.render(w, "lockers", "locker_edit_card", l)
+	}
+}
+
+func (s *Server) updateLocker(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	target := "#locker-error-" + r.PathValue("id")
+	capacity, err := strconv.ParseInt(r.FormValue("capacity"), 10, 64)
+	if err != nil {
+		formErrorAt(w, services.ErrInvalidCapacity, target)
+		return
+	}
+	l, err := s.lockers.Update(r.Context(), id,
+		r.FormValue("name"), r.FormValue("location"), r.FormValue("ip_address"),
+		r.FormValue("kind"), capacity)
+	if errors.Is(err, services.ErrNameRequired) ||
+		errors.Is(err, services.ErrLockerExists) ||
+		errors.Is(err, services.ErrInvalidIP) ||
+		errors.Is(err, services.ErrInvalidKind) ||
+		errors.Is(err, services.ErrInvalidCapacity) {
+		formErrorAt(w, err, target)
+		return
+	}
+	if errors.Is(err, services.ErrLockerNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	s.hub.Publish()
 	s.render(w, "lockers", "locker_card", l)
 }

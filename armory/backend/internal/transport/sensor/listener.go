@@ -47,7 +47,7 @@ func Listen(addr string, svc *services.SensorService) error {
 			for i, v := range slots {
 				c := Change{Slot: i, From: v, To: v}
 				slotNo := int64(i) + 1
-				if err := svc.Sync(ctx, board, slotNo, v, eventFor(c), statusFor(c)); err != nil {
+				if err := svc.Sync(ctx, board, slotNo, v, eventFor(c)); err != nil {
 					log.Printf("board %s slot %d: sync failed: %v", board, slotNo, err)
 				}
 			}
@@ -57,7 +57,7 @@ func Listen(addr string, svc *services.SensorService) error {
 		for _, c := range tracker.Update(board, slots) {
 			log.Printf("board %s slot %d: %d -> %d", board, c.Slot, c.From, c.To)
 			slotNo := int64(c.Slot) + 1
-			err := svc.Record(ctx, board, slotNo, c.To, eventFor(c), statusFor(c))
+			err := svc.Record(ctx, board, slotNo, c.To, eventFor(c))
 			if err != nil {
 				log.Printf("board %s slot %d: save failed: %v", board, slotNo, err)
 			}

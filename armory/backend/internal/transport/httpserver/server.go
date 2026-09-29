@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"context"
+	"errors"
 	"html/template"
 	"log"
 	"net/http"
@@ -11,19 +13,18 @@ import (
 )
 
 type Server struct {
-	categories *services.CategoryService
-	lockers    *services.LockerService
-	guns       *services.GunService
-	hub        *live.Hub
-	pages      map[string]*template.Template
+	lockers  *services.LockerService
+	activity *services.ActivityService
+	hub      *live.Hub
+	pages    map[string]*template.Template
 }
 
-func New(categories *services.CategoryService, lockers *services.LockerService, guns *services.GunService, hub *live.Hub) (*Server, error) {
-	pages, err := loadPages("categories", "lockers", "guns")
+func New(lockers *services.LockerService, activity *services.ActivityService, hub *live.Hub) (*Server, error) {
+	pages, err := loadPages("lockers", "activity")
 	if err != nil {
 		return nil, err
 	}
-	return &Server{categories: categories, lockers: lockers, guns: guns, hub: hub, pages: pages}, nil
+	return &Server{lockers: lockers, activity: activity, hub: hub, pages: pages}, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -32,18 +33,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /events", s.events)
 	mux.Handle("GET /static/", http.FileServerFS(web.FS))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/guns", http.StatusSeeOther)
+		http.Redirect(w, r, "/lockers", http.StatusSeeOther)
 	})
-	mux.HandleFunc("GET /categories", s.listCategories)
-	mux.HandleFunc("POST /categories", s.createCategory)
 	mux.HandleFunc("GET /lockers", s.listLockers)
 	mux.HandleFunc("POST /lockers", s.createLocker)
-	mux.HandleFunc("GET /guns", s.listGuns)
-	mux.HandleFunc("POST /guns", s.createGun)
-	mux.HandleFunc("POST /guns/{id}/retire", s.retireGun)
-	mux.HandleFunc("GET /guns/{id}", s.gunRow)
-	mux.HandleFunc("GET /guns/{id}/edit", s.editGun)
-	mux.HandleFunc("POST /guns/{id}", s.updateGun)
+	mux.HandleFunc("GET /lockers/{id}", s.lockerCard)
+	mux.HandleFunc("GET /lockers/{id}/edit", s.editLocker)
+	mux.HandleFunc("POST /lockers/{id}", s.updateLocker)
+	mux.HandleFunc("GET /activity", s.listActivity)
 	return mux
 }
 
@@ -67,12 +64,19 @@ func (s *Server) render(w http.ResponseWriter, page, name string, data any) {
 }
 
 func formError(w http.ResponseWriter, err error) {
-	w.Header().Set("HX-Retarget", "#form-error")
+	formErrorAt(w, err, "#form-error")
+}
+
+func formErrorAt(w http.ResponseWriter, err error, target string) {
+	w.Header().Set("HX-Retarget", target)
 	w.Header().Set("HX-Reswap", "innerHTML")
 	w.Write([]byte(template.HTMLEscapeString(err.Error())))
 }
 
 func serverError(w http.ResponseWriter, err error) {
+	if errors.Is(err, context.Canceled) {
+		return
+	}
 	log.Printf("internal error: %v", err)
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }

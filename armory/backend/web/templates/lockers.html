@@ -19,16 +19,17 @@
       <p>The IP must match the sensor board.</p>
     </div>
   </div>
-  <div class="form-grid">
-    <input name="name" placeholder="Name" required /><input
-      name="location"
-      placeholder="Location"
-    /><input name="ip_address" placeholder="IP address" /><button
-      class="button-primary"
-      type="submit"
-    >
-      Add locker
-    </button>
+  <div class="form-grid form-grid-wide">
+    <input name="name" placeholder="Name" required />
+    <input name="location" placeholder="Location" />
+    <input name="ip_address" placeholder="IP address" />
+    <select name="kind" required>
+      <option value="">Type</option>
+      <option value="pistol">Pistols</option>
+      <option value="rifle">Rifles</option>
+    </select>
+    <input name="capacity" type="number" min="1" max="5" value="5" required />
+    <button class="button-primary" type="submit">Add locker</button>
   </div>
   <p id="form-error" class="form-error" role="alert"></p>
 </form>
@@ -36,7 +37,7 @@
   id="locker-list"
   class="locker-grid live-region"
   hx-get="/lockers"
-  hx-trigger="armory:changed from:body"
+  hx-trigger="armory:changed[!document.querySelector('.editing-card')] from:body"
   hx-select="#locker-list"
   hx-swap="outerHTML"
 >
@@ -46,36 +47,81 @@
 <section class="panel locker-card">
   <div class="locker-heading">
     <h2>{{.Name}}</h2>
+    <button
+      class="button-secondary"
+      hx-get="/lockers/{{.ID}}/edit"
+      hx-select="unset"
+      hx-target="closest section"
+      hx-swap="outerHTML"
+    >
+      Edit
+    </button>
   </div>
   <p class="locker-meta">
     <span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span
     ><code>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP{{end}}</code>
   </p>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Slot</th>
-          <th>Sensor</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Slots}}
-        <tr id="slot-{{.ID}}" data-live="{{.Reading}}">
-          <td>{{.SlotNo}}</td>
-          <td>
-            {{if eq .Reading 1}}<span class="status status-in"
-              ><i></i>Gun present</span
-            >{{else if eq .Reading 0}}<span class="status status-out"
-              ><i></i>Empty</span
-            >{{else if eq .Reading 2}}<span class="status status-fault"
-              ><i></i>Fault</span
-            >{{else}}<span class="muted">No data</span>{{end}}
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="slot-row slot-row-{{.Kind}}">
+    {{range .Slots}}
+    <div
+      id="slot-{{.ID}}"
+      data-live="{{.Reading}}"
+      class="slot {{if eq .Reading 1}}slot-in{{else if eq .Reading 0}}slot-out{{else if eq .Reading 2}}slot-detecting{{else}}slot-fault{{end}}"
+      data-tip="Slot {{.SlotNo}} · {{if eq .Reading 1}}Available{{else if eq .Reading 0}}Not available{{else if eq .Reading 2}}Not detecting{{else}}Sensor not there{{end}}"
+    >
+      <span>{{.SlotNo}}</span>
+    </div>
+    {{end}}
   </div>
+  <div class="slot-legend">
+    <span><i class="slot-in"></i>Present</span>
+    <span><i class="slot-out"></i>Missing</span>
+    <span><i class="slot-detecting"></i>Not detecting</span>
+    <span><i class="slot-fault"></i>Sensor not there</span>
+  </div>
+</section>
+{{end}}
+
+{{define "locker_edit_card"}}
+<section class="panel locker-card editing-card">
+  <div class="locker-heading">
+    <h2>Edit locker</h2>
+  </div>
+  <form
+    class="locker-edit"
+    hx-post="/lockers/{{.ID}}"
+    hx-select="unset"
+    hx-target="closest section"
+    hx-swap="outerHTML"
+  >
+    <label>Name<input name="name" value="{{.Name}}" required /></label>
+    <label>Location<input name="location" value="{{.Location}}" /></label>
+    <label>IP address<input name="ip_address" value="{{.IPAddress}}" /></label>
+    <label
+      >Type
+      <select name="kind" required>
+        <option value="pistol" {{if eq .Kind "pistol"}}selected{{end}}>Pistols</option>
+        <option value="rifle" {{if eq .Kind "rifle"}}selected{{end}}>Rifles</option>
+      </select>
+    </label>
+    <label
+      >Max guns
+      <input name="capacity" type="number" min="1" max="5" value="{{.Capacity}}" required />
+    </label>
+    <div class="locker-edit-actions">
+      <button class="button-primary" type="submit">Save</button>
+      <button
+        class="button-secondary"
+        type="button"
+        hx-get="/lockers/{{.ID}}"
+        hx-select="unset"
+        hx-target="closest section"
+        hx-swap="outerHTML"
+      >
+        Cancel
+      </button>
+    </div>
+    <p id="locker-error-{{.ID}}" class="form-error" role="alert"></p>
+  </form>
 </section>
 {{end}}

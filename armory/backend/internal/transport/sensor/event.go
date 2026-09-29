@@ -7,12 +7,6 @@ const (
 	eventSensorRecovered = "sensor_recovered"
 )
 
-const (
-	statusIn    = "in"
-	statusOut   = "out"
-	statusFault = ""
-)
-
 func eventFor(c Change) string {
 	if c.To == 2 {
 		return eventSensorFault
@@ -25,14 +19,4 @@ func eventFor(c Change) string {
 	} else {
 		return eventGunReturned
 	}
-}
-
-func statusFor(c Change) string {
-	if c.To == 2 {
-		return statusFault
-	}
-	if c.To == 0 {
-		return statusOut
-	}
-	return statusIn
 }

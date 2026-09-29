@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="page-heading">
+  <div>
+    <h1>Activity</h1>
+    <p>When guns were taken and put back.</p>
+  </div>
+  <span class="record-count">{{len .Events}} recent</span>
+</div>
+<div class="panel table-panel">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Locker</th>
+          <th>Slot</th>
+          <th>Event</th>
+        </tr>
+      </thead>
+      <tbody
+        id="activity-rows"
+        class="live-region"
+        hx-get="/activity"
+        hx-trigger="armory:changed from:body"
+        hx-select="#activity-rows"
+        hx-swap="outerHTML"
+      >
+        {{range .Events}}
+        <tr>
+          <td><time datetime="{{.OccurredAt}}">{{.OccurredAt}}</time></td>
+          <td>{{if .LockerName}}{{.LockerName}}{{else}}<span class="muted">—</span>{{end}}</td>
+          <td>{{.SlotNo}}</td>
+          <td>
+            {{if eq .Type "gun_removed"}}<span class="status status-taken"><i></i>Taken</span>
+            {{else if eq .Type "gun_returned"}}<span class="status status-returned"><i></i>Returned</span>
+            {{else if eq .Type "sensor_fault"}}<span class="status status-detecting"><i></i>Sensor not detecting</span>
+            {{else if eq .Type "sensor_recovered"}}<span class="status status-out"><i></i>Sensor detecting again</span>
+            {{else}}{{.Type}}{{end}}
+            {{if .Details}}<small class="muted">{{.Details}}</small>{{end}}
+          </td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="4"><span class="muted">Nothing has happened yet.</span></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

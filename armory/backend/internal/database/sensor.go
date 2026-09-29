@@ -6,22 +6,22 @@ import (
 	"errors"
 )
 
-func (s *Store) FindSensorSlot(ctx context.Context, lockerIP string, slotNo int64) (slotID, gunID int64, err error) {
-	err = s.db.QueryRowContext(ctx, `
-	SELECT s.id, COALESCE(g.id, 0)
+func (s *Store) FindSensorSlot(ctx context.Context, lockerIP string, slotNo int64) (int64, error) {
+	var slotID int64
+	err := s.db.QueryRowContext(ctx, `
+	SELECT s.id
 	FROM slots s
 	JOIN lockers l ON l.id = s.locker_id
-	LEFT JOIN guns g ON g.slot_id = s.id
-	WHERE l.ip_address = ? AND s.slot_no = ?
-	`, lockerIP, slotNo).Scan(&slotID, &gunID)
+	WHERE l.ip_address = ? AND s.slot_no = ? AND s.active = 1
+	`, lockerIP, slotNo).Scan(&slotID)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, ErrNotFound
+		return 0, ErrNotFound
 	}
-	return slotID, gunID, err
+	return slotID, err
 }
 
-func (s *Store) RecordSensorEvent(ctx context.Context, slotID, gunID int64, reading byte, eventType, newStatus string) error {
+func (s *Store) RecordSensorEvent(ctx context.Context, slotID int64, reading byte, eventType string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -30,8 +30,8 @@ func (s *Store) RecordSensorEvent(ctx context.Context, slotID, gunID int64, read
 
 	ts := now()
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO events (occurred_at, type, gun_id, slot_id) VALUES (?, ?, ?, ?)",
-		ts, eventType, nullIfZero(gunID), slotID)
+		"INSERT INTO events (occurred_at, type, slot_id) VALUES (?, ?, ?)",
+		ts, eventType, slotID)
 	if err != nil {
 		return err
 	}
@@ -40,25 +40,27 @@ func (s *Store) RecordSensorEvent(ctx context.Context, slotID, gunID int64, read
 		reading, ts, slotID)
 	if err != nil {
 		return err
-	}
-	if gunID != 0 && newStatus != "" {
-		_, err = tx.ExecContext(ctx,
-			"UPDATE guns SET status = ?, updated_at = ? WHERE id = ? AND status != 'retired'",
-			newStatus, ts, gunID)
-		if err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }
 
-// SyncSensorSlot stores the first reading after startup and logs an event only if the gun's status was wrong.
-func (s *Store) SyncSensorSlot(ctx context.Context, slotID, gunID int64, reading byte, eventType, newStatus string) error {
+// SyncSensorSlot stores the first reading after startup and logs an event only if it differs from the last stored one.
+func (s *Store) SyncSensorSlot(ctx context.Context, slotID int64, reading byte, eventType string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	var previous int64
+	err = tx.QueryRowContext(ctx,
+		"SELECT COALESCE(reading, -1) FROM slots WHERE id = ?", slotID).Scan(&previous)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
 
 	ts := now()
 	_, err = tx.ExecContext(ctx,
@@ -67,24 +69,12 @@ func (s *Store) SyncSensorSlot(ctx context.Context, slotID, gunID int64, reading
 	if err != nil {
 		return err
 	}
-	if gunID != 0 && newStatus != "" {
-		res, err := tx.ExecContext(ctx,
-			"UPDATE guns SET status = ?, updated_at = ? WHERE id = ? AND status NOT IN ('retired', ?)",
-			newStatus, ts, gunID, newStatus)
+	if previous != -1 && previous != int64(reading) {
+		_, err = tx.ExecContext(ctx,
+			"INSERT INTO events (occurred_at, type, slot_id, details) VALUES (?, ?, ?, ?)",
+			ts, eventType, slotID, "changed while the server was offline")
 		if err != nil {
 			return err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if n > 0 {
-			_, err = tx.ExecContext(ctx,
-				"INSERT INTO events (occurred_at, type, gun_id, slot_id, details) VALUES (?, ?, ?, ?, ?)",
-				ts, eventType, gunID, slotID, "synced from sensor on startup")
-			if err != nil {
-				return err
-			}
 		}
 	}
 	return tx.Commit()

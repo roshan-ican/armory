@@ -5,6 +5,8 @@ type Locker struct {
 	Name      string
 	Location  string
 	IPAddress string
+	Kind      string
+	Capacity  int64
 	Slots     []Slot
 }
 
