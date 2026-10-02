@@ -7,6 +7,7 @@ type Locker struct {
 	IPAddress string
 	Kind      string
 	Capacity  int64
+	Online    bool
 	Slots     []Slot
 }
 
@@ -17,4 +18,5 @@ type Slot struct {
 	SensorID int64
 	Active   bool
 	Reading  int64
+	TakenBy  string
 }

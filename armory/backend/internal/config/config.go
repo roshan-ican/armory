@@ -4,6 +4,8 @@ import "os"
 
 type Config struct {
 	Addr       string
+	TLSAddr    string
+	CertDir    string
 	DBPath     string
 	SensorAddr string
 }
@@ -11,6 +13,8 @@ type Config struct {
 func Load() Config {
 	return Config{
 		Addr:       getEnv("ARMORY_ADDR", ":8080"),
+		TLSAddr:    getEnv("ARMORY_TLS_ADDR", ":8443"),
+		CertDir:    getEnv("ARMORY_CERTS", "certs"),
 		DBPath:     getEnv("ARMORY_DB", "armory.db"),
 		SensorAddr: getEnv("ARMORY_SENSOR_ADDR", ":47810"),
 	}

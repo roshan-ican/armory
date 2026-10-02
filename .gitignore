@@ -5,3 +5,7 @@
 .vs/
 .vscode/
 .idea/
+**/certs/
+**/node_modules/
+armory/deploy/release/
+armory/deploy/ArmoryRelease.zip

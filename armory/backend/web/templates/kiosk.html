@@ -1,0 +1,29 @@
+{{define "kiosk"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070708">
+  <link rel="manifest" href="/kiosk.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Armory</title>
+  <link rel="stylesheet" href="/static/svelte/kiosk.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    if ("serviceWorker" in navigator && !(window.Capacitor && window.Capacitor.isNativePlatform())) {
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!reloading) { reloading = true; location.reload(); }
+      });
+      navigator.serviceWorker.register("/sw.js", {scope:"/kiosk", updateViaCache:"none"}).then((registration) => registration.update());
+    }
+  </script>
+  <script src="/static/face/face-api.js"></script>
+  <script src="/static/face/capture.js"></script>
+  <script type="module" src="/static/svelte/kiosk.js"></script>
+</body>
+</html>{{end}}

@@ -2,42 +2,40 @@
 <div class="page-heading">
   <div>
     <h1>Lockers</h1>
-    <p>Cabinets, their network address, and their slots.</p>
+    <p>Every gun in the armory, live.</p>
   </div>
-  <span class="record-count">{{len .Lockers}} total</span>
+  <span class="record-count">{{len .Lockers}} lockers</span>
 </div>
-<form
-  class="panel create-form"
-  hx-post="/lockers"
-  hx-target="#locker-list"
-  hx-swap="beforeend"
-  hx-on::before-request="document.getElementById('form-error').textContent = ''"
->
-  <div class="panel-heading">
-    <div>
-      <h2>Add locker</h2>
-      <p>The IP must match the sensor board.</p>
+<details class="panel add-locker">
+  <summary>New locker</summary>
+  <form
+    class="create-form"
+    hx-post="/admin/lockers"
+    hx-target="#locker-list"
+    hx-swap="beforeend"
+    hx-on::before-request="document.getElementById('form-error').textContent = ''"
+  >
+    <div class="form-grid form-grid-wide">
+      <input name="name" placeholder="Name" required />
+      <input name="location" placeholder="Location" />
+      <input name="ip_address" placeholder="IP address" />
+      <select name="kind" required>
+        <option value="">Type</option>
+        <option value="pistol">Pistols</option>
+        <option value="rifle">Rifles</option>
+      </select>
+      <input name="capacity" type="number" min="1" max="5" value="5" required />
+      <button class="button-primary" type="submit">Add locker</button>
     </div>
-  </div>
-  <div class="form-grid form-grid-wide">
-    <input name="name" placeholder="Name" required />
-    <input name="location" placeholder="Location" />
-    <input name="ip_address" placeholder="IP address" />
-    <select name="kind" required>
-      <option value="">Type</option>
-      <option value="pistol">Pistols</option>
-      <option value="rifle">Rifles</option>
-    </select>
-    <input name="capacity" type="number" min="1" max="5" value="5" required />
-    <button class="button-primary" type="submit">Add locker</button>
-  </div>
-  <p id="form-error" class="form-error" role="alert"></p>
-</form>
+    <p class="hint">The IP must match the sensor board.</p>
+    <p id="form-error" class="form-error" role="alert"></p>
+  </form>
+</details>
 <div
   id="locker-list"
   class="locker-grid live-region"
-  hx-get="/lockers"
-  hx-trigger="armory:changed[!document.querySelector('.editing-card')] from:body"
+  hx-get="/admin/lockers"
+  hx-trigger="every 3s[!document.querySelector('.editing-card')], armory:changed[!document.querySelector('.editing-card')] from:body"
   hx-select="#locker-list"
   hx-swap="outerHTML"
 >
@@ -46,10 +44,10 @@
 {{end}} {{define "locker_card"}}
 <section class="panel locker-card">
   <div class="locker-heading">
-    <h2>{{.Name}}</h2>
+    <div class="locker-title-line"><h2>{{.Name}}</h2>{{if .Online}}<span class="board-state is-online"><i></i>Detecting</span>{{else}}<span class="board-state"><i></i>Not detecting</span>{{end}}</div>
     <button
       class="button-secondary"
-      hx-get="/lockers/{{.ID}}/edit"
+      hx-get="/admin/lockers/{{.ID}}/edit"
       hx-select="unset"
       hx-target="closest section"
       hx-swap="outerHTML"
@@ -61,23 +59,30 @@
     <span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span
     ><code>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP{{end}}</code>
   </p>
+  {{$online := .Online}}
   <div class="slot-row slot-row-{{.Kind}}">
     {{range .Slots}}
     <div
       id="slot-{{.ID}}"
-      data-live="{{.Reading}}"
-      class="slot {{if eq .Reading 1}}slot-in{{else if eq .Reading 0}}slot-out{{else if eq .Reading 2}}slot-detecting{{else}}slot-fault{{end}}"
-      data-tip="Slot {{.SlotNo}} · {{if eq .Reading 1}}Available{{else if eq .Reading 0}}Not available{{else if eq .Reading 2}}Not detecting{{else}}Sensor not there{{end}}"
+      data-live="{{.Reading}}-{{$online}}-{{.TakenBy}}"
+      class="slot {{if not $online}}slot-detecting{{else if eq .Reading 1}}slot-in{{else if eq .Reading 0}}slot-out{{else if eq .Reading 2}}slot-detecting{{else}}slot-fault{{end}}"
+      data-tip="Slot {{.SlotNo}}{{if .TakenBy}} · Taken by {{.TakenBy}}{{end}} · {{if not $online}}Not detecting{{else if eq .Reading 1}}Available{{else if eq .Reading 0}}Not available{{else if eq .Reading 2}}Sensor not there{{else}}No data yet{{end}}"
     >
       <span>{{.SlotNo}}</span>
+      {{if .TakenBy}}<em>Taken by {{.TakenBy}}</em>{{end}}
     </div>
     {{end}}
   </div>
   <div class="slot-legend">
+    {{if .Online}}
     <span><i class="slot-in"></i>Present</span>
     <span><i class="slot-out"></i>Missing</span>
-    <span><i class="slot-detecting"></i>Not detecting</span>
-    <span><i class="slot-fault"></i>Sensor not there</span>
+    <span><i class="slot-detecting"></i>Sensor not there</span>
+    {{$nodata := false}}{{range .Slots}}{{if lt .Reading 0}}{{$nodata = true}}{{end}}{{end}}
+    {{if $nodata}}<span><i class="slot-fault"></i>No data yet</span>{{end}}
+    {{else}}
+    <span><i class="slot-detecting"></i>No sensor data is being received</span>
+    {{end}}
   </div>
 </section>
 {{end}}
@@ -89,7 +94,7 @@
   </div>
   <form
     class="locker-edit"
-    hx-post="/lockers/{{.ID}}"
+    hx-post="/admin/lockers/{{.ID}}"
     hx-select="unset"
     hx-target="closest section"
     hx-swap="outerHTML"
@@ -113,7 +118,7 @@
       <button
         class="button-secondary"
         type="button"
-        hx-get="/lockers/{{.ID}}"
+        hx-get="/admin/lockers/{{.ID}}"
         hx-select="unset"
         hx-target="closest section"
         hx-swap="outerHTML"

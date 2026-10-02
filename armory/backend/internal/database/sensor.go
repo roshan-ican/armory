@@ -6,6 +6,17 @@ import (
 	"errors"
 )
 
+func (s *Store) MarkLockerSeen(ctx context.Context, lockerIP string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE lockers SET last_seen = ? WHERE ip_address = ?", now(), lockerIP)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) FindSensorSlot(ctx context.Context, lockerIP string, slotNo int64) (int64, error) {
 	var slotID int64
 	err := s.db.QueryRowContext(ctx, `

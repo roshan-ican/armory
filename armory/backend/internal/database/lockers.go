@@ -10,7 +10,9 @@ const SlotsPerLocker = 5
 
 func (s *Store) ListLockers(ctx context.Context) ([]models.Locker, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, COALESCE(location, ''), COALESCE(ip_address, ''), kind, capacity FROM lockers ORDER BY name")
+		`SELECT id, name, COALESCE(location, ''), COALESCE(ip_address, ''), kind, capacity,
+			COALESCE(julianday(last_seen) >= julianday('now', '-5 seconds'), 0)
+		 FROM lockers ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +22,7 @@ func (s *Store) ListLockers(ctx context.Context) ([]models.Locker, error) {
 
 	for rows.Next() {
 		var l models.Locker
-		if err := rows.Scan(&l.ID, &l.Name, &l.Location, &l.IPAddress, &l.Kind, &l.Capacity); err != nil {
+		if err := rows.Scan(&l.ID, &l.Name, &l.Location, &l.IPAddress, &l.Kind, &l.Capacity, &l.Online); err != nil {
 			return nil, err
 		}
 		lockers = append(lockers, l)
@@ -40,7 +42,13 @@ func (s *Store) ListLockers(ctx context.Context) ([]models.Locker, error) {
 
 func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, locker_id, slot_no, sensor_id, active, COALESCE(reading, -1) FROM slots WHERE active = 1 ORDER BY locker_id, slot_no")
+		`SELECT s.id, s.locker_id, s.slot_no, s.sensor_id, s.active, COALESCE(s.reading, -1),
+			COALESCE((SELECT u.name FROM request_slots rs
+				JOIN requests r ON r.id = rs.request_id
+				JOIN users u ON u.id = r.requester_id
+				WHERE rs.slot_id = s.id AND r.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collected')
+				ORDER BY r.id DESC LIMIT 1), '')
+		 FROM slots s WHERE s.active = 1 ORDER BY s.locker_id, s.slot_no`)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +57,7 @@ func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) 
 	slots := make(map[int64][]models.Slot)
 	for rows.Next() {
 		var sl models.Slot
-		if err := rows.Scan(&sl.ID, &sl.LockerID, &sl.SlotNo, &sl.SensorID, &sl.Active, &sl.Reading); err != nil {
+		if err := rows.Scan(&sl.ID, &sl.LockerID, &sl.SlotNo, &sl.SensorID, &sl.Active, &sl.Reading, &sl.TakenBy); err != nil {
 			return nil, err
 		}
 		slots[sl.LockerID] = append(slots[sl.LockerID], sl)

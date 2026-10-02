@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS lockers (
     location   TEXT,
     ip_address TEXT,
     kind       TEXT    NOT NULL DEFAULT 'rifle' CHECK (kind IN ('rifle', 'pistol')),
-    capacity   INTEGER NOT NULL DEFAULT 5 CHECK (capacity BETWEEN 1 AND 5)
+    capacity   INTEGER NOT NULL DEFAULT 5 CHECK (capacity BETWEEN 1 AND 5),
+    last_seen  TEXT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -12,10 +13,26 @@ CREATE TABLE IF NOT EXISTS users (
     name       TEXT    NOT NULL,
     service_no TEXT    NOT NULL UNIQUE,
     role       TEXT    NOT NULL CHECK (role IN ('admin', 'requester')),
+    password_hash TEXT,
     active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     created_at TEXT    NOT NULL,
     updated_at TEXT    NOT NULL
 ) STRICT;
+
+CREATE TABLE IF NOT EXISTS face_enrollment_requests (
+    id            INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    service_no    TEXT    NOT NULL,
+    face_refs     TEXT    NOT NULL,
+    model_version TEXT    NOT NULL,
+    status        TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    decided_by    INTEGER REFERENCES users (id),
+    created_at    TEXT    NOT NULL,
+    decided_at    TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_pending_face_request_per_service_no
+ON face_enrollment_requests (service_no) WHERE status = 'pending';
 
 CREATE TABLE IF NOT EXISTS slots (
     id         INTEGER PRIMARY KEY,
@@ -42,6 +59,7 @@ CREATE TABLE IF NOT EXISTS face_enrollments (
 CREATE TABLE IF NOT EXISTS requests (
     id                 INTEGER PRIMARY KEY,
     requester_id       INTEGER NOT NULL REFERENCES users (id),
+    requested_locker_id INTEGER REFERENCES lockers (id),
     kind               TEXT CHECK (kind IN ('pistol', 'rifle')),
     slot_id            INTEGER REFERENCES slots (id),
     status             TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'collected', 'returned', 'expired', 'cancelled')),

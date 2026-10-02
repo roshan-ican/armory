@@ -1,17 +1,28 @@
 {{define "layout"}}<!doctype html>
 <html lang="en"><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
+  <link rel="manifest" href="/admin.webmanifest">
+  <meta name="theme-color" content="#070708">
+  <link rel="apple-touch-icon" href="/static/icons/admin-apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Armory Admin">
   <title>{{.Title}} · Armory</title><link rel="stylesheet" href="/static/styles.css"><script src="/static/htmx.min.js"></script>
 </head><body>
   <header class="topbar">
-    <a class="brand" href="/lockers">Armory</a>
+    <a class="brand" href="/admin/lockers">Armory</a>
     <nav class="nav" aria-label="Primary navigation">
-      <a href="/lockers" {{if eq .Title "Lockers"}}class="active" aria-current="page"{{end}}>Lockers</a>
-      <a href="/activity" {{if eq .Title "Activity"}}class="active" aria-current="page"{{end}}>Activity</a>
+      <a href="/admin/lockers" {{if eq .Title "Lockers"}}class="active" aria-current="page"{{end}}>Lockers</a>
+      <a href="/admin/requests" {{if eq .Title "Requests"}}class="active" aria-current="page"{{end}}>Requests<span id="req-badge" class="badge" hx-get="/admin/requests/badge" hx-trigger="load, armory:changed from:body" hx-swap="innerHTML" hx-select="unset"></span></a>
+      <a href="/admin/activity" {{if eq .Title "Activity"}}class="active" aria-current="page"{{end}}>Activity</a>
+      <a href="/admin/users" {{if eq .Title "People"}}class="active" aria-current="page"{{end}}>People<span id="ppl-badge" class="badge" hx-get="/admin/users/badge" hx-trigger="load, armory:changed from:body" hx-swap="innerHTML" hx-select="unset"></span></a>
     </nav>
+    <button id="notify-btn" class="notify-btn" type="button" hidden>Enable alerts</button>
+    <a class="kiosk-link" href="/admin/logout">Sign out</a>
     <span class="system-status"><i></i><span class="when-online">Live</span><span class="when-offline">Reconnecting…</span></span>
   </header>
   <main>{{template "content" .}}</main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toast-text"></span><a href="/admin/requests">Review</a></div>
   <script>
     (() => {
       const refresh = () => htmx.trigger(document.body, "armory:changed");
@@ -32,10 +43,94 @@
       const localise = () =>
         document.querySelectorAll("time[datetime]").forEach((el) => {
           const d = new Date(el.getAttribute("datetime"));
-          if (!isNaN(d)) el.textContent = d.toLocaleString([], { dateStyle: "medium", timeStyle: "medium" });
+          if (isNaN(d)) return;
+          el.textContent =
+            el.dataset.format === "time"
+              ? d.toLocaleTimeString([], { timeStyle: "short" })
+              : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
         });
       localise();
       document.addEventListener("htmx:afterSwap", localise);
+      const chime = () => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          [880, 1175].forEach((freq, i) => {
+            const start = ctx.currentTime + i * 0.16;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.3);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.32);
+          });
+        } catch (e) {}
+      };
+      const toast = document.getElementById("toast");
+      let toastTimer = null;
+      const notifyBtn = document.getElementById("notify-btn");
+      const canNotify = "Notification" in window;
+      const syncNotifyBtn = () => {
+        notifyBtn.hidden = !canNotify || Notification.permission !== "default";
+      };
+      if (canNotify) {
+        syncNotifyBtn();
+        notifyBtn.addEventListener("click", () => {
+          Notification.requestPermission().then(syncNotifyBtn);
+        });
+      }
+      const systemNotify = (text, url) => {
+        if (!canNotify || Notification.permission !== "granted") return;
+        const options = {
+          body: text,
+          tag: "armory-request",
+          renotify: true,
+          icon: "/static/icons/admin-192.png",
+          data: { url },
+        };
+        const fallback = () => {
+          try {
+            new Notification("Armory", options);
+          } catch (e) {}
+        };
+        if (navigator.serviceWorker) {
+          navigator.serviceWorker
+            .getRegistration("/admin/")
+            .then((reg) => (reg && reg.active ? reg.showNotification("Armory", options) : fallback()))
+            .catch(fallback);
+        } else {
+          fallback();
+        }
+      };
+      const toastLink = toast.querySelector("a");
+      const announce = (text, url) => {
+        if (document.hidden) systemNotify(text, url);
+        document.getElementById("toast-text").textContent = text;
+        toastLink.href = url;
+        toast.hidden = false;
+        toast.classList.remove("is-in");
+        void toast.offsetWidth;
+        toast.classList.add("is-in");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => (toast.hidden = true), 8000);
+        chime();
+      };
+      const watched = {
+        "req-badge": { url: "/admin/requests", one: "New request waiting", many: " requests waiting" },
+        "ppl-badge": { url: "/admin/users", one: "New enrollment request", many: " enrollment requests waiting" },
+      };
+      const lastCounts = {};
+      document.addEventListener("htmx:afterSwap", (e) => {
+        const id = e.detail.target && e.detail.target.id;
+        const w = watched[id];
+        if (!w) return;
+        const n = parseInt(e.detail.target.textContent, 10) || 0;
+        if (id in lastCounts && n > lastCounts[id]) announce(n > 1 ? n + w.many : w.one, w.url);
+        lastCounts[id] = n;
+      });
       const status = document.querySelector(".system-status");
       let opened = false;
       let events = null;
@@ -54,12 +149,18 @@
         if (events) events.close();
         events = null;
       };
-      document.addEventListener("visibilitychange", () => (document.hidden ? disconnect() : connect()));
-      window.addEventListener("pagehide", disconnect);
-      window.addEventListener("pageshow", () => {
-        if (!document.hidden) connect();
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+          connect();
+          refresh();
+        }
       });
-      if (!document.hidden) connect();
+      window.addEventListener("pagehide", disconnect);
+      window.addEventListener("pageshow", connect);
+      connect();
     })();
+  </script>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { scope: "/admin/" });
   </script>
 </body></html>{{end}}

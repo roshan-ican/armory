@@ -1,0 +1,42 @@
+{{define "login"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <link rel="manifest" href="/admin.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/admin-apple-touch-icon.png">
+  <title>{{if .Setup}}Set up admin{{else}}Admin sign in{{end}} · Armory Admin</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body class="kiosk">
+  <header class="kiosk-bar"><span class="brand">Armory</span></header>
+  <main class="kiosk-main">
+    <section class="panel auth-panel">
+      <h1>{{if .Setup}}Create the first admin{{else}}Admin sign in{{end}}</h1>
+      <p class="kiosk-sub">{{if .Setup}}This one-time setup closes the admin area to everyone else.{{else}}Use your admin username and password.{{end}}</p>
+      <form hx-post="{{if .Setup}}/admin/setup{{else}}/admin/login{{end}}" hx-swap="none" hx-on::before-request="document.getElementById('form-error').textContent = ''">
+        <input type="hidden" name="next" value="{{.Next}}">
+        <label>Username<input name="username" autocomplete="username" required autofocus></label>
+        <label>Password<span class="password-field"><input id="admin-password" name="password" type="password" autocomplete="{{if .Setup}}new-password{{else}}current-password{{end}}" minlength="8" required><button id="toggle-password" type="button" aria-label="Show password" aria-pressed="false"><svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.1A9.7 9.7 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.7M6.2 6.2C3.8 7.8 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button></span></label>
+        <button class="button-primary" type="submit">{{if .Setup}}Create admin{{else}}Sign in{{end}}</button>
+        <p id="form-error" class="form-error" role="alert"></p>
+      </form>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const input = document.getElementById("admin-password");
+      const button = document.getElementById("toggle-password");
+      button.addEventListener("click", () => {
+        const visible = input.type === "text";
+        input.type = visible ? "password" : "text";
+        button.setAttribute("aria-pressed", String(!visible));
+        button.setAttribute("aria-label", visible ? "Show password" : "Hide password");
+        input.focus();
+      });
+    })();
+  </script>
+</body>
+</html>{{end}}

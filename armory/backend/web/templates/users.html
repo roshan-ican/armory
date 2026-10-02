@@ -1,0 +1,77 @@
+{{define "content"}}
+<div class="page-heading people-heading">
+  <div>
+    <span class="page-eyebrow">ACCESS MANAGEMENT</span>
+    <h1>People</h1>
+    <p>Review enrollment requests and manage who can use the armory.</p>
+  </div>
+  <span class="record-count">{{len .Users}} active</span>
+</div>
+
+<section class="people-section" aria-labelledby="enrollment-title">
+  <div class="section-heading">
+    <div>
+      <h2 id="enrollment-title">Enrollment requests</h2>
+      <p>Face access remains disabled until you approve the request.</p>
+    </div>
+    {{if .Pending}}<span class="count-badge">{{len .Pending}} waiting</span>{{end}}
+  </div>
+
+  {{if .Pending}}
+  <div class="enrollment-list">
+    {{range .Pending}}
+    <article class="enrollment-card" id="enrollment-{{.ID}}">
+      <div class="person-avatar" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.7-5 3.2-7.5 7.5-7.5s6.8 2.5 7.5 7.5"/></svg>
+      </div>
+      <div class="enrollment-identity">
+        <strong>{{.Name}}</strong>
+        <span>Service number <code>{{.ServiceNo}}</code></span>
+      </div>
+      <div class="enrollment-meta">
+        <span class="status status-waiting"><i></i>Awaiting review</span>
+      </div>
+      <div class="enrollment-actions">
+        <button class="button-secondary" hx-post="/admin/enrollments/{{.ID}}/reject" hx-swap="none">Reject</button>
+        <button class="button-primary" hx-post="/admin/enrollments/{{.ID}}/approve" hx-swap="none">Approve access</button>
+      </div>
+      <p id="enrollment-error-{{.ID}}" class="form-error enrollment-error" role="alert"></p>
+    </article>
+    {{end}}
+  </div>
+  {{else}}
+  <div class="empty-state">
+    <span class="empty-icon" aria-hidden="true">✓</span>
+    <div><strong>All caught up</strong><p>No enrollment requests are waiting for review.</p></div>
+  </div>
+  {{end}}
+</section>
+
+<section class="people-section" aria-labelledby="active-title">
+  <div class="section-heading">
+    <div><h2 id="active-title">Active people</h2><p>Accounts currently recognized by the system.</p></div>
+  </div>
+  <div class="people-list" id="user-rows">
+    {{range .Users}}{{template "user_row" .}}{{end}}
+  </div>
+</section>
+{{end}}
+
+{{define "user_row"}}
+<article class="person-row">
+  <div class="person-avatar person-avatar-small" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.7-5 3.2-7.5 7.5-7.5s6.8 2.5 7.5 7.5"/></svg>
+  </div>
+  <div class="person-primary"><strong>{{.Name}}</strong><span><code>{{.ServiceNo}}</code></span></div>
+  <span class="role-chip">{{if eq .Role "admin"}}Administrator{{else}}Requester{{end}}</span>
+  <div class="access-state">
+    {{if eq .Role "admin"}}
+      <span class="status status-password"><i></i>Password access</span>
+    {{else if .Faces}}
+      <span class="status status-in"><i></i>Face enrolled</span>
+    {{else}}
+      <span class="status status-muted"><i></i>Not enrolled</span>
+    {{end}}
+  </div>
+</article>
+{{end}}

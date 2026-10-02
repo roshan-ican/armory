@@ -1,0 +1,97 @@
+{{define "content"}}
+<div
+  id="requests-live"
+  hx-get="/admin/requests"
+  hx-trigger="armory:changed from:body"
+  hx-select="#requests-live"
+  hx-swap="outerHTML"
+>
+  <div class="page-heading">
+    <div>
+      <h1>Requests</h1>
+      <p>Approve who can take a gun.</p>
+    </div>
+    <span class="record-count">{{len .Pending}} waiting</span>
+  </div>
+
+  <section aria-labelledby="waiting-title">
+    <h2 id="waiting-title" class="section-title">Waiting</h2>
+    <div class="request-list">
+      {{range .Pending}}
+      <article class="request-card" id="request-{{.ID}}">
+        <span class="avatar" aria-hidden="true">{{.Initials}}</span>
+        <div class="request-body">
+          <strong>{{.UserName}}</strong>
+          <span class="request-line">{{if eq .Kind "pistol"}}Pistol{{else}}Rifle{{end}}{{if .LockerName}} · {{.LockerName}}{{end}}{{if .Slots}}, {{if gt (len .Slots) 1}}guns{{else}}gun{{end}} {{.SlotList}}{{end}}</span>
+          {{if .Reason}}<span class="request-reason">“{{.Reason}}”</span>{{end}}
+        </div>
+        <div class="request-actions">
+          <button
+            type="button"
+            class="button-quiet"
+            hx-post="/admin/requests/{{.ID}}/reject"
+            hx-target="closest .request-card"
+            hx-swap="outerHTML"
+            hx-select="unset"
+          >
+            Decline
+          </button>
+          <button
+            type="button"
+            class="button-primary"
+            hx-post="/admin/requests/{{.ID}}/approve"
+            hx-target="closest .request-card"
+            hx-swap="outerHTML"
+            hx-select="unset"
+          >
+            Approve
+          </button>
+        </div>
+        <p id="request-error-{{.ID}}" class="form-error request-error" role="alert"></p>
+      </article>
+      {{else}}
+      <p class="empty-note">Nothing is waiting.</p>
+      {{end}}
+    </div>
+  </section>
+
+  <section aria-labelledby="earlier-title">
+    <h2 id="earlier-title" class="section-title">Earlier</h2>
+    <div class="panel table-panel">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Person</th>
+              <th>Request</th>
+              <th>When</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .History}}
+            <tr>
+              <td>{{.UserName}}</td>
+              <td>{{if eq .Kind "pistol"}}Pistol{{else}}Rifle{{end}}{{if .LockerName}} <small class="muted">· {{.LockerName}}{{if .Slots}}, {{if gt (len .Slots) 1}}guns{{else}}gun{{end}} {{.SlotList}}{{end}}</small>{{end}}</td>
+              <td class="muted-cell"><time datetime="{{.CreatedAt}}">{{.CreatedAt}}</time></td>
+              <td>
+                {{if eq .Status "approved"}}<span class="status status-in"><i></i>Approved</span>
+                {{else if eq .Status "collected"}}<span class="status status-detecting"><i></i>Taken</span>
+                {{else if eq .Status "returned"}}<span class="status status-returned"><i></i>Returned</span>
+                {{else if eq .Status "rejected"}}<span class="status status-taken"><i></i>Declined</span>
+                {{else if eq .Status "cancelled"}}<span class="status status-out"><i></i>Cancelled</span>
+                {{else}}<span class="status status-out"><i></i>{{.Status}}</span>{{end}}
+              </td>
+            </tr>
+            {{else}}
+            <tr>
+              <td colspan="4"><span class="muted">Nothing yet.</span></td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{{end}}
