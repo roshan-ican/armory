@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrator')) {
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Run this from an Administrator PowerShell.'
 }
 
@@ -18,6 +18,13 @@ Pop-Location
 
 if (-not (Test-Path "$dest\certs")) { Copy-Item "$backend\certs" "$dest\certs" -Recurse }
 if (-not (Test-Path "$dest\armory.db")) { Copy-Item "$backend\armory.db" "$dest\armory.db" }
+
+$adminIP = '192.168.4.200'
+if (-not (Get-NetIPAddress -IPAddress $adminIP -ErrorAction SilentlyContinue)) {
+    $nic = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like '192.168.4.*' -and $_.PrefixOrigin -eq 'Manual' } | Select-Object -First 1
+    if (-not $nic) { throw 'No static 192.168.4.x address on this PC, set one first.' }
+    New-NetIPAddress -InterfaceIndex $nic.InterfaceIndex -IPAddress $adminIP -PrefixLength 24 -SkipAsSource $true | Out-Null
+}
 
 [Environment]::SetEnvironmentVariable('ARMORY_DB', "$dest\armory.db", 'Machine')
 [Environment]::SetEnvironmentVariable('ARMORY_CERTS', "$dest\certs", 'Machine')
