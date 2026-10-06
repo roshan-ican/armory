@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Armory</string>
-    <string name="title_activity_main">Armory</string>
-    <string name="package_name">com.armory.kiosk</string>
-    <string name="custom_url_scheme">com.armory.kiosk</string>
-</resources>
