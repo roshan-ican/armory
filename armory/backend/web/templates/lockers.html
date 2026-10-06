@@ -41,29 +41,108 @@
 >
   {{range .Lockers}}{{template "locker_card" .}}{{end}}
 </div>
+<script>
+  (() => {
+    const arranging = new Set();
+    let picked = null;
+    let dragging = null;
+    const sync = () => {
+      document.querySelectorAll(".locker-card[data-locker]").forEach((card) => {
+        const id = card.dataset.locker;
+        const on = arranging.has(id);
+        card.classList.toggle("arranging", on);
+        const btn = card.querySelector("[data-arrange]");
+        if (btn) btn.textContent = on ? "Done" : "Arrange";
+        card.querySelectorAll(".slot").forEach((slot) => {
+          slot.draggable = on;
+          slot.classList.toggle("picked", !!picked && picked.locker === id && picked.slot === slot.dataset.slot);
+        });
+      });
+    };
+    const swap = (card, from, to) => {
+      picked = null;
+      dragging = null;
+      card.classList.remove("editing-card");
+      if (from === to) return sync();
+      htmx.ajax("POST", "/admin/lockers/" + card.dataset.locker + "/swap", {
+        target: card,
+        swap: "outerHTML",
+        values: { from, to },
+      });
+    };
+    const slotIn = (e) => e.target.closest && e.target.closest(".locker-card.arranging .slot");
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-arrange]");
+      if (btn) {
+        const id = btn.closest(".locker-card").dataset.locker;
+        if (arranging.has(id)) arranging.delete(id);
+        else arranging.add(id);
+        picked = null;
+        return sync();
+      }
+      const slot = slotIn(e);
+      if (!slot) return;
+      const card = slot.closest(".locker-card");
+      if (picked && picked.locker === card.dataset.locker) return swap(card, picked.slot, slot.dataset.slot);
+      picked = { locker: card.dataset.locker, slot: slot.dataset.slot };
+      sync();
+    });
+    document.addEventListener("dragstart", (e) => {
+      const slot = slotIn(e);
+      if (!slot) return;
+      const card = slot.closest(".locker-card");
+      dragging = { locker: card.dataset.locker, slot: slot.dataset.slot };
+      card.classList.add("editing-card");
+      e.dataTransfer.setData("text/plain", slot.dataset.slot);
+      e.dataTransfer.effectAllowed = "move";
+    });
+    document.addEventListener("dragover", (e) => {
+      if (dragging && slotIn(e)) e.preventDefault();
+    });
+    document.addEventListener("dragend", () => {
+      document.querySelectorAll(".locker-card.editing-card[data-locker]").forEach((c) => c.classList.remove("editing-card"));
+      dragging = null;
+    });
+    document.addEventListener("drop", (e) => {
+      const slot = slotIn(e);
+      if (!slot || !dragging) return;
+      e.preventDefault();
+      const card = slot.closest(".locker-card");
+      if (card.dataset.locker !== dragging.locker) return;
+      swap(card, dragging.slot, slot.dataset.slot);
+    });
+    document.addEventListener("htmx:afterSettle", sync);
+    sync();
+  })();
+</script>
 {{end}} {{define "locker_card"}}
-<section class="panel locker-card">
+<section class="panel locker-card" data-locker="{{.ID}}">
   <div class="locker-heading">
     <div class="locker-title-line"><h2>{{.Name}}</h2>{{if .Online}}<span class="board-state is-online"><i></i>Detecting</span>{{else}}<span class="board-state"><i></i>Not detecting</span>{{end}}</div>
-    <button
-      class="button-secondary"
-      hx-get="/admin/lockers/{{.ID}}/edit"
-      hx-select="unset"
-      hx-target="closest section"
-      hx-swap="outerHTML"
-    >
-      Edit
-    </button>
+    <div class="locker-actions">
+      <button class="button-secondary" type="button" data-arrange>Arrange</button>
+      <button
+        class="button-secondary"
+        hx-get="/admin/lockers/{{.ID}}/edit"
+        hx-select="unset"
+        hx-target="closest section"
+        hx-swap="outerHTML"
+      >
+        Edit
+      </button>
+    </div>
   </div>
   <p class="locker-meta">
     <span>{{if .Location}}{{.Location}}{{else}}No location{{end}}</span
     ><code>{{if .IPAddress}}{{.IPAddress}}{{else}}No IP{{end}}</code>
   </p>
+  {{if not .Online}}<div class="sensors-off"><i></i>Sensors are off · check board power and WiFi</div>{{end}}
   {{$online := .Online}}
   <div class="slot-row slot-row-{{.Kind}}">
     {{range .Slots}}
     <div
       id="slot-{{.ID}}"
+      data-slot="{{.SlotNo}}"
       data-live="{{.Reading}}-{{$online}}-{{.TakenBy}}"
       class="slot {{if not $online}}slot-detecting{{else if eq .Reading 1}}slot-in{{else if eq .Reading 0}}slot-out{{else if eq .Reading 2}}slot-detecting{{else}}slot-fault{{end}}"
       data-tip="Slot {{.SlotNo}}{{if .TakenBy}} · Taken by {{.TakenBy}}{{end}} · {{if not $online}}Not detecting{{else if eq .Reading 1}}Available{{else if eq .Reading 0}}Not available{{else if eq .Reading 2}}Sensor not there{{else}}No data yet{{end}}"
@@ -84,6 +163,8 @@
     <span><i class="slot-detecting"></i>No sensor data is being received</span>
     {{end}}
   </div>
+  <p class="arrange-hint">Drag a gun onto another, or tap two, to swap their sensors. Pull a gun out to see which slot lights up.</p>
+  <p id="locker-error-{{.ID}}" class="form-error" role="alert"></p>
 </section>
 {{end}}
 
@@ -113,6 +194,15 @@
       >Max guns
       <input name="capacity" type="number" min="1" max="5" value="{{.Capacity}}" required />
     </label>
+    <label
+      >First sensor slot
+      <input name="sensor_start" type="number" min="1" max="5" value="{{.SensorStart}}" required />
+    </label>
+    <label class="check-row">
+      <input name="sensor_reverse" type="checkbox" value="1" {{if .SensorReverse}}checked{{end}} />
+      Sensors are wired in reverse order
+    </label>
+    <p class="field-hint">The board sends 3 sensor values. They go to the guns starting at the first sensor slot. Guns before it show "Sensor not there".</p>
     <div class="locker-edit-actions">
       <button class="button-primary" type="submit">Save</button>
       <button

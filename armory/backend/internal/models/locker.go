@@ -1,14 +1,16 @@
 package models
 
 type Locker struct {
-	ID        int64
-	Name      string
-	Location  string
-	IPAddress string
-	Kind      string
-	Capacity  int64
-	Online    bool
-	Slots     []Slot
+	ID            int64
+	Name          string
+	Location      string
+	IPAddress     string
+	Kind          string
+	Capacity      int64
+	SensorStart   int64
+	SensorReverse bool
+	Online        bool
+	Slots         []Slot
 }
 
 type Slot struct {

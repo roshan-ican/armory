@@ -82,3 +82,40 @@ func (s *LockerService) Update(ctx context.Context, id int64, name, location, ip
 	}
 	return updated, err
 }
+
+func (s *LockerService) SwapSensors(ctx context.Context, id, a, b int64) (models.Locker, error) {
+	l, err := s.Get(ctx, id)
+	if err != nil {
+		return models.Locker{}, err
+	}
+	if a == b || a < 1 || b < 1 || a > l.Capacity || b > l.Capacity {
+		return models.Locker{}, ErrInvalidSlot
+	}
+	err = s.store.SwapSensors(ctx, id, a, b)
+	switch {
+	case errors.Is(err, database.ErrInUse):
+		return models.Locker{}, ErrSlotInUse
+	case errors.Is(err, database.ErrNotFound):
+		return models.Locker{}, ErrInvalidSlot
+	case err != nil:
+		return models.Locker{}, err
+	}
+	return s.Get(ctx, id)
+}
+
+func (s *LockerService) SetSensorLayout(ctx context.Context, id, start int64, reverse bool) (models.Locker, error) {
+	l, err := s.Get(ctx, id)
+	if err != nil {
+		return models.Locker{}, err
+	}
+	if start < 1 || start > l.Capacity {
+		return models.Locker{}, ErrInvalidSensorStart
+	}
+	if err := s.store.SetSensorLayout(ctx, id, start, reverse); err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return models.Locker{}, ErrLockerNotFound
+		}
+		return models.Locker{}, err
+	}
+	return s.Get(ctx, id)
+}

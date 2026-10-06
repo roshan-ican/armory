@@ -79,8 +79,8 @@ func TestSeveralGunsInOneRequest(t *testing.T) {
 	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := f.store.CountAvailableInLocker(ctx, f.locker.ID); n != 1 {
-		t.Fatalf("available after approval = %d, want 1", n)
+	if n, _ := f.store.CountAvailableInLocker(ctx, f.locker.ID); n != 3 {
+		t.Fatalf("available after approval = %d, want 3 until a gun is collected", n)
 	}
 
 	f.sensor(t, 1, 0)
@@ -138,7 +138,7 @@ func TestChosenGunRules(t *testing.T) {
 		}
 	})
 
-	t.Run("two people ask for the same gun, the second approval fails", func(t *testing.T) {
+	t.Run("two people ask for the same gun, approving the second replaces the first", func(t *testing.T) {
 		f := newFlow(t)
 		first, err := f.svc.CreateForLocker(ctx, f.user.ID, f.locker.ID, []int64{2}, "")
 		if err != nil {
@@ -151,11 +151,14 @@ func TestChosenGunRules(t *testing.T) {
 		if _, err := f.svc.Approve(ctx, f.admin.ID, first.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.svc.Approve(ctx, f.admin.ID, second.ID); !errors.Is(err, ErrGunUnavailable) {
-			t.Fatalf("err = %v, want ErrGunUnavailable", err)
+		if _, err := f.svc.Approve(ctx, f.admin.ID, second.ID); err != nil {
+			t.Fatal(err)
 		}
-		if status, _ := f.status(t, second.ID); status != models.RequestPending {
-			t.Fatalf("second request status %s, want pending", status)
+		if status, _ := f.status(t, first.ID); status != models.RequestExpired {
+			t.Fatalf("first request status %s, want expired", status)
+		}
+		if status, _ := f.status(t, second.ID); status != models.RequestApproved {
+			t.Fatalf("second request status %s, want approved", status)
 		}
 	})
 
@@ -174,7 +177,7 @@ func TestChosenGunRules(t *testing.T) {
 		}
 	})
 
-	t.Run("the catalog marks reserved guns unavailable", func(t *testing.T) {
+	t.Run("the catalog marks a collected gun unavailable", func(t *testing.T) {
 		f := newFlow(t)
 		req, err := f.svc.CreateForLocker(ctx, f.user.ID, f.locker.ID, []int64{1}, "")
 		if err != nil {
@@ -186,15 +189,22 @@ func TestChosenGunRules(t *testing.T) {
 		if err := f.store.MarkLockerSeen(ctx, "10.0.0.5"); err != nil {
 			t.Fatal(err)
 		}
-		items, err := f.svc.Catalog(ctx)
-		if err != nil {
-			t.Fatal(err)
+		avail := func() map[int64]bool {
+			items, err := f.svc.Catalog(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[int64]bool{}
+			for _, sl := range items[0].Slots {
+				got[sl.No] = sl.Available
+			}
+			return got
 		}
-		got := map[int64]bool{}
-		for _, sl := range items[0].Slots {
-			got[sl.No] = sl.Available
+		if got := avail(); !got[1] || !got[2] || !got[3] {
+			t.Fatalf("available %v, want all three until the gun is collected", got)
 		}
-		if got[1] || !got[2] || !got[3] {
+		f.sensor(t, 1, 0)
+		if got := avail(); got[1] || !got[2] || !got[3] {
 			t.Fatalf("available %v, want only 2 and 3", got)
 		}
 	})

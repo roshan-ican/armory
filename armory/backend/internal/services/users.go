@@ -71,17 +71,21 @@ func (s *UserService) Get(ctx context.Context, id int64) (models.User, error) {
 	return u, err
 }
 
-func (s *UserService) Create(ctx context.Context, name, serviceNo, role string) (models.User, error) {
+func userKey(name string) string {
+	return strings.ToUpper(strings.Join(strings.Fields(name), " "))
+}
+
+func (s *UserService) Create(ctx context.Context, name, username, role string) (models.User, error) {
 	u := models.User{
 		Name:      strings.TrimSpace(name),
-		ServiceNo: strings.ToUpper(strings.TrimSpace(serviceNo)),
+		ServiceNo: strings.ToUpper(strings.TrimSpace(username)),
 		Role:      role,
 	}
 	if u.Name == "" {
 		return models.User{}, ErrNameRequired
 	}
 	if u.ServiceNo == "" {
-		return models.User{}, ErrServiceNoRequired
+		u.ServiceNo = userKey(u.Name)
 	}
 	if u.Role == "" {
 		u.Role = "requester"
@@ -95,4 +99,18 @@ func (s *UserService) Create(ctx context.Context, name, serviceNo, role string) 
 		return models.User{}, ErrUserExists
 	}
 	return created, err
+}
+
+func (s *UserService) Remove(ctx context.Context, id int64) error {
+	err := s.store.DeactivateRequester(ctx, id)
+	switch {
+	case errors.Is(err, database.ErrNotFound):
+		return ErrUserNotFound
+	case errors.Is(err, database.ErrConflict):
+		return ErrCannotRemoveAdmin
+	case errors.Is(err, database.ErrInUse):
+		return ErrUserBusy
+	default:
+		return err
+	}
 }

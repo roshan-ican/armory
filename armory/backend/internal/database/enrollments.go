@@ -63,7 +63,7 @@ func (s *Store) DecideFaceEnrollmentRequest(ctx context.Context, id, adminID int
 		ts := now()
 		var userID int64
 		var role string
-		err := tx.QueryRowContext(ctx, "SELECT id, role FROM users WHERE service_no = ? AND active = 1", item.ServiceNo).Scan(&userID, &role)
+		err := tx.QueryRowContext(ctx, "SELECT id, role FROM users WHERE service_no = ? OR upper(name) = ?", item.ServiceNo, item.ServiceNo).Scan(&userID, &role)
 		if errors.Is(err, sql.ErrNoRows) {
 			res, err := tx.ExecContext(ctx, `INSERT INTO users (name, service_no, role, created_at, updated_at)
 				VALUES (?, ?, 'requester', ?, ?)`, item.Name, item.ServiceNo, ts, ts)
@@ -83,6 +83,9 @@ func (s *Store) DecideFaceEnrollmentRequest(ctx context.Context, id, adminID int
 			return ErrDuplicate
 		} else {
 			if _, err := tx.ExecContext(ctx, "UPDATE face_enrollments SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", ts, userID); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE users SET active = 1, updated_at = ? WHERE id = ?", ts, userID); err != nil {
 				return err
 			}
 		}

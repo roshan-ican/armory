@@ -383,7 +383,10 @@ func TestApproveRequest(t *testing.T) {
 	})
 
 	second := newRequest("rifle")
-	t.Run("an approved slot is reserved, so the next one is chosen", func(t *testing.T) {
+	t.Run("a collected slot is reserved, so the next one is chosen", func(t *testing.T) {
+		if _, err := st.db.Exec("UPDATE request_slots SET status = 'collected' WHERE request_id = ?", first); err != nil {
+			t.Fatal(err)
+		}
 		got, err := st.ApproveRequest(ctx, second, admin.ID)
 		if err != nil {
 			t.Fatal(err)

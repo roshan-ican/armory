@@ -33,10 +33,9 @@ func (s *Server) matchFace(w http.ResponseWriter, r *http.Request) {
 	}
 	s.startSession(w, r, s.sessions.Start(res.User))
 	writeJSON(w, map[string]any{
-		"matched":    true,
-		"name":       res.User.Name,
-		"service_no": res.User.ServiceNo,
-		"role":       res.User.Role,
-		"distance":   res.Distance,
+		"matched":  true,
+		"name":     res.User.Name,
+		"role":     res.User.Role,
+		"distance": res.Distance,
 	})
 }

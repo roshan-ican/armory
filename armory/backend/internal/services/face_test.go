@@ -56,7 +56,6 @@ func TestUserServiceCreate(t *testing.T) {
 		want                  error
 	}{
 		{"", "X", "admin", ErrNameRequired},
-		{"A", " ", "admin", ErrServiceNoRequired},
 		{"A", "X", "boss", ErrInvalidRole},
 		{"B", "sn-1", "admin", ErrUserExists},
 	}
@@ -171,5 +170,126 @@ func TestFaceMatchWithNobodyEnrolled(t *testing.T) {
 	}
 	if res.Matched {
 		t.Fatalf("matched %+v with nobody enrolled", res)
+	}
+}
+
+func nativeAt(first float64) []float64 {
+	d := make([]float64, 192)
+	d[0] = first
+	return d
+}
+
+func TestFaceNativeEmbeddings(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	alice, err := users.Create(ctx, "Alice", "A1", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, alice.ID, [][]float64{nativeAt(0), nativeAt(0.1)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, alice.ID, [][]float64{nativeAt(0), descriptorAt(0)}); !errors.Is(err, ErrInvalidDescriptor) {
+		t.Fatalf("mixed lengths: got %v, want ErrInvalidDescriptor", err)
+	}
+
+	res, err := face.Match(ctx, nativeAt(0.7))
+	if err != nil || !res.Matched || res.User.ID != alice.ID {
+		t.Fatalf("within native threshold: %+v, %v", res, err)
+	}
+	res, err = face.Match(ctx, nativeAt(1.0))
+	if err != nil || res.Matched {
+		t.Fatalf("beyond native threshold: %+v, %v", res, err)
+	}
+	res, err = face.Match(ctx, descriptorAt(0))
+	if err != nil || res.Matched {
+		t.Fatalf("a 128-d descriptor must not match 192-d enrolments: %+v, %v", res, err)
+	}
+}
+
+func TestEnrollmentIsKeyedByName(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	if err := face.RequestEnrollment(ctx, "  Sam   Lee ", [][]float64{descriptorAt(0)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := face.RequestEnrollment(ctx, "sam lee", [][]float64{descriptorAt(0)}); !errors.Is(err, ErrEnrollmentPending) {
+		t.Fatalf("same name in other case: got %v, want ErrEnrollmentPending", err)
+	}
+	if err := face.RequestEnrollment(ctx, "   ", [][]float64{descriptorAt(0)}); !errors.Is(err, ErrNameRequired) {
+		t.Fatalf("blank name: got %v, want ErrNameRequired", err)
+	}
+
+	u, err := users.Create(ctx, "Pat Kim", "", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.ServiceNo != "PAT KIM" {
+		t.Fatalf("derived key = %q, want PAT KIM", u.ServiceNo)
+	}
+	if _, err := users.Create(ctx, "pat  kim", "", "requester"); !errors.Is(err, ErrUserExists) {
+		t.Fatalf("duplicate name: got %v, want ErrUserExists", err)
+	}
+}
+
+func TestEnrollmentRejectsFaceOfAnotherPerson(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	ann, err := users.Create(ctx, "Ann", "", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, ann.ID, [][]float64{descriptorAt(0)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := face.RequestEnrollment(ctx, "Rosh", [][]float64{descriptorAt(0.1)}); !errors.Is(err, ErrFaceAlreadyEnrolled) {
+		t.Fatalf("same face, new name: got %v, want ErrFaceAlreadyEnrolled", err)
+	}
+	if err := face.RequestEnrollment(ctx, "Cara", [][]float64{descriptorAt(5)}); err != nil {
+		t.Fatalf("different face: got %v, want nil", err)
+	}
+	if err := face.RequestEnrollment(ctx, "Ann", [][]float64{descriptorAt(0.1)}); err != nil {
+		t.Fatalf("same person re-enrolling under own name: got %v, want nil", err)
+	}
+}
+
+func TestRemoveRequester(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	ann, err := users.Create(ctx, "Ann", "", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, ann.ID, [][]float64{descriptorAt(0)}); err != nil {
+		t.Fatal(err)
+	}
+	boss, err := users.Create(ctx, "Boss", "", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := users.Remove(ctx, boss.ID); !errors.Is(err, ErrCannotRemoveAdmin) {
+		t.Fatalf("remove admin: got %v, want ErrCannotRemoveAdmin", err)
+	}
+	if err := users.Remove(ctx, 9999); !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("remove unknown: got %v, want ErrUserNotFound", err)
+	}
+	if err := users.Remove(ctx, ann.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.Get(ctx, ann.ID); !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("removed user still listed: %v", err)
+	}
+	res, err := face.Match(ctx, descriptorAt(0))
+	if err != nil || res.Matched {
+		t.Fatalf("removed person's face must not match: %+v, %v", res, err)
+	}
+	if err := users.Remove(ctx, ann.ID); !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("removing twice: got %v, want ErrUserNotFound", err)
 	}
 }

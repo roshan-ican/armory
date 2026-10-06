@@ -70,8 +70,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 				ips = append(ips, l.IPAddress)
 			}
 		}
+		if cfg.DoorIP != "" {
+			ips = append(ips, cfg.DoorIP)
+		}
 		return ips, nil
-	})
+	}, cfg.DoorIP)
 	go outputs.Run(ctx)
 	requests := services.NewRequestService(store, outputs, hub)
 	sensors.OnSlotChange(requests.SlotChanged)

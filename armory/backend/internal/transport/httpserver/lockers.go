@@ -41,6 +41,7 @@ func (s *Server) createLocker(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	s.hub.Publish()
 	s.render(w, "lockers", "locker_card", l)
 }
 
@@ -74,6 +75,36 @@ func (s *Server) editLocker(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) swapSensors(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	target := "#locker-error-" + r.PathValue("id")
+	from, ferr := strconv.ParseInt(r.FormValue("from"), 10, 64)
+	to, terr := strconv.ParseInt(r.FormValue("to"), 10, 64)
+	if ferr != nil || terr != nil {
+		formErrorAt(w, services.ErrInvalidSlot, target)
+		return
+	}
+	l, err := s.lockers.SwapSensors(r.Context(), id, from, to)
+	if errors.Is(err, services.ErrInvalidSlot) || errors.Is(err, services.ErrSlotInUse) {
+		formErrorAt(w, err, target)
+		return
+	}
+	if errors.Is(err, services.ErrLockerNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	s.hub.Publish()
+	s.render(w, "lockers", "locker_card", l)
+}
+
 func (s *Server) updateLocker(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -104,6 +135,22 @@ func (s *Server) updateLocker(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		serverError(w, err)
 		return
+	}
+	if raw := r.FormValue("sensor_start"); raw != "" {
+		start, perr := strconv.ParseInt(raw, 10, 64)
+		if perr != nil {
+			formErrorAt(w, services.ErrInvalidSensorStart, target)
+			return
+		}
+		l, err = s.lockers.SetSensorLayout(r.Context(), id, start, r.FormValue("sensor_reverse") == "1")
+		if errors.Is(err, services.ErrInvalidSensorStart) {
+			formErrorAt(w, err, target)
+			return
+		}
+		if err != nil {
+			serverError(w, err)
+			return
+		}
 	}
 	s.hub.Publish()
 	s.render(w, "lockers", "locker_card", l)

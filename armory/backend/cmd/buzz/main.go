@@ -17,13 +17,13 @@ func main() {
 		log.Fatal("usage: go run ./cmd/buzz <correct|wrong|unlock> <locker-ip>")
 	}
 	command, ip := os.Args[1], os.Args[2]
-	conn, err := net.ListenPacket("udp", ":47810")
+	conn, err := net.ListenPacket("udp", ":0")
 	if err != nil {
-		log.Fatalf("stop the server first, it owns port %d: %v", port, err)
+		log.Fatalf("open udp socket: %v", err)
 	}
 	defer conn.Close()
 
-	outputs := services.NewOutputs(conn, port, func(context.Context) ([]string, error) { return []string{ip}, nil })
+	outputs := services.NewOutputs(conn, port, func(context.Context) ([]string, error) { return []string{ip}, nil }, "")
 	switch command {
 	case "unlock":
 		outputs.PulseUnlock(ip)

@@ -11,7 +11,56 @@ import (
 const reservedSlots = `
 SELECT rs.slot_id FROM request_slots rs
 JOIN requests rr ON rr.id = rs.request_id
+WHERE rr.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collected')
+  AND (rs.status = 'collected' OR EXISTS (
+	SELECT 1 FROM request_slots x WHERE x.request_id = rr.id AND x.status <> 'chosen'))`
+
+const approvedSlots = `
+SELECT rs.slot_id FROM request_slots rs
+JOIN requests rr ON rr.id = rs.request_id
 WHERE rr.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collected')`
+
+func supersedeUnclaimed(ctx context.Context, tx *sql.Tx, requestID int64) error {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT r.id, MIN(theirs.slot_id)
+		FROM requests r
+		JOIN request_slots theirs ON theirs.request_id = r.id
+		WHERE r.status = 'approved' AND r.id <> ?
+		  AND r.requested_locker_id = (SELECT requested_locker_id FROM requests WHERE id = ?)
+		  AND NOT EXISTS (SELECT 1 FROM request_slots x WHERE x.request_id = r.id AND x.status <> 'chosen')
+		GROUP BY r.id`, requestID, requestID)
+	if err != nil {
+		return err
+	}
+	type stale struct{ id, slotID int64 }
+	var list []stale
+	for rows.Next() {
+		var st stale
+		if err := rows.Scan(&st.id, &st.slotID); err != nil {
+			rows.Close()
+			return err
+		}
+		list = append(list, st)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, st := range list {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE requests SET status = 'expired' WHERE id = ? AND status = 'approved'", st.id); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO events (occurred_at, type, slot_id, request_id, details)
+			SELECT ?, 'request_expired', ?, ?, 'did not collect, replaced by ' || u.name
+			FROM requests r JOIN users u ON u.id = r.requester_id WHERE r.id = ?`,
+			now(), st.slotID, st.id, requestID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func (s *Store) CreateRequest(ctx context.Context, userID int64, kind, reason, expectedReturnAt string) (int64, error) {
 	res, err := s.db.ExecContext(ctx, "INSERT INTO requests (requester_id, kind, reason, expected_return_at, created_at) VALUES (?,?,?,?,?)",
@@ -226,7 +275,7 @@ func (s *Store) ApproveRequest(ctx context.Context, id, adminID int64) (models.R
 			FROM slots s
 			JOIN lockers l ON l.id = s.locker_id
 			WHERE l.kind = ? AND (? = 0 OR l.id = ?) AND s.active = 1 AND s.reading = 1
-			  AND s.id NOT IN (`+reservedSlots+`)
+			  AND s.id NOT IN (`+approvedSlots+`)
 			ORDER BY l.id, s.slot_no
 			LIMIT 1`, kind, requestedLockerID, requestedLockerID).Scan(&slotID, &lockerID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -243,6 +292,10 @@ func (s *Store) ApproveRequest(ctx context.Context, id, adminID int64) (models.R
 			"UPDATE requests SET requested_locker_id = ? WHERE id = ?", lockerID, id); err != nil {
 			return models.Request{}, err
 		}
+	}
+
+	if err := supersedeUnclaimed(ctx, tx, id); err != nil {
+		return models.Request{}, err
 	}
 
 	res, err := tx.ExecContext(ctx, `

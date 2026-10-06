@@ -229,8 +229,8 @@ func TestCountAvailable(t *testing.T) {
 	if _, err := f.st.ApproveRequest(ctx, id, f.admin.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := count("rifle"); got != 2 {
-		t.Fatalf("an approved slot must be reserved, got %d", got)
+	if got := count("rifle"); got != 3 {
+		t.Fatalf("an approved gun nobody collected is still on offer, got %d", got)
 	}
 }
 

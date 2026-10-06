@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS lockers (
     ip_address TEXT,
     kind       TEXT    NOT NULL DEFAULT 'rifle' CHECK (kind IN ('rifle', 'pistol')),
     capacity   INTEGER NOT NULL DEFAULT 5 CHECK (capacity BETWEEN 1 AND 5),
+    sensor_start INTEGER NOT NULL DEFAULT 1 CHECK (sensor_start BETWEEN 1 AND 5),
+    sensor_reverse INTEGER NOT NULL DEFAULT 0 CHECK (sensor_reverse IN (0, 1)),
     last_seen  TEXT
 ) STRICT;
 
@@ -40,6 +42,7 @@ CREATE TABLE IF NOT EXISTS slots (
     slot_no    INTEGER NOT NULL CHECK (slot_no BETWEEN 1 AND 5),
     sensor_id  INTEGER NOT NULL UNIQUE,
     reading    INTEGER CHECK (reading IN (0, 1, 2)),
+    sensor_pos INTEGER CHECK (sensor_pos BETWEEN 1 AND 5),
     active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     created_at TEXT    NOT NULL,
     updated_at TEXT    NOT NULL,

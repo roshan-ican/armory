@@ -61,21 +61,23 @@ type outputState struct {
 }
 
 type Outputs struct {
-	mu    sync.Mutex
-	state map[string]*outputState
-	conn  net.PacketConn
-	port  int
-	ips   func(ctx context.Context) ([]string, error)
-	kick  chan struct{}
+	mu     sync.Mutex
+	state  map[string]*outputState
+	conn   net.PacketConn
+	port   int
+	ips    func(ctx context.Context) ([]string, error)
+	doorIp string
+	kick   chan struct{}
 }
 
-func NewOutputs(conn net.PacketConn, port int, ips func(ctx context.Context) ([]string, error)) *Outputs {
+func NewOutputs(conn net.PacketConn, port int, ips func(ctx context.Context) ([]string, error), doorIp string) *Outputs {
 	return &Outputs{
-		state: make(map[string]*outputState),
-		conn:  conn,
-		port:  port,
-		ips:   ips,
-		kick:  make(chan struct{}, 1),
+		state:  make(map[string]*outputState),
+		conn:   conn,
+		port:   port,
+		ips:    ips,
+		doorIp: doorIp,
+		kick:   make(chan struct{}, 1),
 	}
 }
 
@@ -110,6 +112,12 @@ func (o *Outputs) PulseUnlock(ip string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.queue(ip, openLock, 0, "open")
+}
+
+func (o *Outputs) PulseDoor() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.queue(o.doorIp, openLock, 0, "door")
 }
 
 func (o *Outputs) PulseRight(ip string) {
@@ -173,7 +181,10 @@ func (o *Outputs) Alarm(ctx context.Context, lockerIP string, on bool) error {
 	o.SetWrong(lockerIP, on)
 	return nil
 }
-
+func (o *Outputs) OpenDoor(ctx context.Context) error {
+	o.PulseDoor()
+	return nil
+}
 func (o *Outputs) Run(ctx context.Context) {
 	ticker := time.NewTicker(sendEvery)
 	defer ticker.Stop()

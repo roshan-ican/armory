@@ -153,3 +153,39 @@ func (s *Store) ListFaceEnrollments(ctx context.Context) ([]models.FaceEnrollmen
 	}
 	return out, rows.Err()
 }
+
+func (s *Store) DeactivateRequester(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var role string
+	err = tx.QueryRowContext(ctx, "SELECT role FROM users WHERE id = ? AND active = 1", id).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role != "requester" {
+		return ErrConflict
+	}
+	var open int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM requests WHERE requester_id = ? AND status IN ('pending', 'approved', 'collected')", id).Scan(&open); err != nil {
+		return err
+	}
+	if open > 0 {
+		return ErrInUse
+	}
+	ts := now()
+	if _, err := tx.ExecContext(ctx, "UPDATE face_enrollments SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", ts, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE users SET active = 0, updated_at = ? WHERE id = ?", ts, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

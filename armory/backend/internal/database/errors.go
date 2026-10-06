@@ -6,6 +6,7 @@ var (
 	ErrDuplicate       = errors.New("already exists")
 	ErrNotFound        = errors.New("not found")
 	ErrConflict        = errors.New("conflict")
+	ErrInUse           = errors.New("in use")
 	ErrNoFreeSlot      = errors.New("no free slot")
 	ErrRequestNotFound = errors.New("request not found")
 	ErrRequestClosed   = errors.New("this request was already handled")

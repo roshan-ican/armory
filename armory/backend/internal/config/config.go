@@ -8,6 +8,7 @@ type Config struct {
 	CertDir    string
 	DBPath     string
 	SensorAddr string
+	DoorIP     string
 }
 
 func Load() Config {
@@ -17,6 +18,7 @@ func Load() Config {
 		CertDir:    getEnv("ARMORY_CERTS", "certs"),
 		DBPath:     getEnv("ARMORY_DB", "armory.db"),
 		SensorAddr: getEnv("ARMORY_SENSOR_ADDR", ":47810"),
+		DoorIP:     getEnv("ARMORY_DOOR_IP", "192.168.4.49"),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"math"
 	"strings"
 
@@ -12,11 +13,14 @@ import (
 )
 
 const (
-	descriptorLen  = 128
-	maxEnrollFaces = 20
-	faceModelName  = "face-api-1.7.15"
-	MatchThreshold = 0.5
-	noDistance     = math.MaxFloat64
+	descriptorLen        = 128
+	maxNativeLen         = 512
+	maxEnrollFaces       = 20
+	faceModelName        = "face-api-1.7.15"
+	nativeModelName      = "mobilefacenet-tflite"
+	MatchThreshold       = 0.5
+	NativeMatchThreshold = 0.8
+	noDistance           = math.MaxFloat64
 )
 
 type FaceService struct {
@@ -52,7 +56,7 @@ func (s *FaceService) DecideEnrollment(ctx context.Context, id, adminID int64, a
 }
 
 func validDescriptor(d []float64) bool {
-	if len(d) != descriptorLen {
+	if len(d) < descriptorLen || len(d) > maxNativeLen {
 		return false
 	}
 	for _, v := range d {
@@ -61,6 +65,20 @@ func validDescriptor(d []float64) bool {
 		}
 	}
 	return true
+}
+
+func modelFor(d []float64) string {
+	if len(d) == descriptorLen {
+		return faceModelName
+	}
+	return nativeModelName
+}
+
+func thresholdFor(d []float64) float64 {
+	if len(d) == descriptorLen {
+		return MatchThreshold
+	}
+	return NativeMatchThreshold
 }
 
 func distance(a, b []float64) float64 {
@@ -78,7 +96,7 @@ func (s *FaceService) Enroll(ctx context.Context, userID int64, descriptors [][]
 	}
 	refs := make([]string, 0, len(descriptors))
 	for _, d := range descriptors {
-		if !validDescriptor(d) {
+		if !validDescriptor(d) || len(d) != len(descriptors[0]) {
 			return ErrInvalidDescriptor
 		}
 		b, err := json.Marshal(d)
@@ -88,30 +106,32 @@ func (s *FaceService) Enroll(ctx context.Context, userID int64, descriptors [][]
 		refs = append(refs, string(b))
 	}
 
-	err := s.store.ReplaceFaceEnrollments(ctx, userID, refs, faceModelName)
+	err := s.store.ReplaceFaceEnrollments(ctx, userID, refs, modelFor(descriptors[0]))
 	if errors.Is(err, database.ErrNotFound) {
 		return ErrUserNotFound
 	}
 	return err
 }
 
-func (s *FaceService) RequestEnrollment(ctx context.Context, name, serviceNo string, descriptors [][]float64) error {
-	name, serviceNo = strings.TrimSpace(name), strings.ToUpper(strings.TrimSpace(serviceNo))
+func (s *FaceService) RequestEnrollment(ctx context.Context, name string, descriptors [][]float64) error {
+	name = strings.Join(strings.Fields(name), " ")
 	if name == "" {
 		return ErrNameRequired
-	}
-	if serviceNo == "" {
-		return ErrServiceNoRequired
 	}
 	refs, err := encodeDescriptors(descriptors)
 	if err != nil {
 		return err
 	}
+	if owner, found, err := s.existingOwner(ctx, descriptors); err != nil {
+		return err
+	} else if found && userKey(owner.Name) != userKey(name) {
+		return ErrFaceAlreadyEnrolled
+	}
 	raw, err := json.Marshal(refs)
 	if err != nil {
 		return err
 	}
-	if err := s.store.CreateFaceEnrollmentRequest(ctx, name, serviceNo, string(raw), faceModelName); errors.Is(err, database.ErrDuplicate) {
+	if err := s.store.CreateFaceEnrollmentRequest(ctx, name, userKey(name), string(raw), modelFor(descriptors[0])); errors.Is(err, database.ErrDuplicate) {
 		return ErrEnrollmentPending
 	} else {
 		return err
@@ -124,7 +144,7 @@ func encodeDescriptors(descriptors [][]float64) ([]string, error) {
 	}
 	refs := make([]string, 0, len(descriptors))
 	for _, d := range descriptors {
-		if !validDescriptor(d) {
+		if !validDescriptor(d) || len(d) != len(descriptors[0]) {
 			return nil, ErrInvalidDescriptor
 		}
 		b, err := json.Marshal(d)
@@ -134,6 +154,19 @@ func encodeDescriptors(descriptors [][]float64) ([]string, error) {
 		refs = append(refs, string(b))
 	}
 	return refs, nil
+}
+
+func (s *FaceService) existingOwner(ctx context.Context, descriptors [][]float64) (models.User, bool, error) {
+	for _, d := range descriptors {
+		res, err := s.Match(ctx, d)
+		if err != nil {
+			return models.User{}, false, err
+		}
+		if res.Matched {
+			return res.User, true, nil
+		}
+	}
+	return models.User{}, false, nil
 }
 
 func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchResult, error) {
@@ -149,7 +182,7 @@ func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchRes
 	var bestUser models.User
 	for _, e := range enrollments {
 		var ref []float64
-		if json.Unmarshal([]byte(e.FaceRef), &ref) != nil || !validDescriptor(ref) {
+		if json.Unmarshal([]byte(e.FaceRef), &ref) != nil || len(ref) != len(descriptor) || !validDescriptor(ref) {
 			continue
 		}
 		if d := distance(descriptor, ref); d < best {
@@ -157,7 +190,8 @@ func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchRes
 			bestUser = e.User
 		}
 	}
-	if best > MatchThreshold {
+	log.Printf("face match: best %.3f limit %.2f user %q", best, thresholdFor(descriptor), bestUser.Name)
+	if best > thresholdFor(descriptor) {
 		return MatchResult{Distance: best}, nil
 	}
 	return MatchResult{Matched: true, User: bestUser, Distance: best}, nil

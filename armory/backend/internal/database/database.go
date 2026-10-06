@@ -45,6 +45,18 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("add lockers.last_seen: %w", err)
 	}
+	if err := addLockerSensorStart(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("add lockers.sensor_start: %w", err)
+	}
+	if err := addLockerSensorReverse(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("add lockers.sensor_reverse: %w", err)
+	}
+	if err := addSlotSensorPos(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("add slots.sensor_pos: %w", err)
+	}
 
 	if err := migrateDropGuns(db); err != nil {
 		db.Close()
@@ -66,6 +78,66 @@ func addLockerLastSeen(db *sql.DB) error {
 	}
 	_, err = db.Exec("ALTER TABLE lockers ADD COLUMN last_seen TEXT")
 	return err
+}
+
+func addLockerSensorStart(db *sql.DB) error {
+	var n int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('lockers') WHERE name = 'sensor_start'").Scan(&n)
+	if err != nil || n > 0 {
+		return err
+	}
+	_, err = db.Exec("ALTER TABLE lockers ADD COLUMN sensor_start INTEGER NOT NULL DEFAULT 1 CHECK (sensor_start BETWEEN 1 AND 5)")
+	return err
+}
+
+func addLockerSensorReverse(db *sql.DB) error {
+	var n int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('lockers') WHERE name = 'sensor_reverse'").Scan(&n)
+	if err != nil || n > 0 {
+		return err
+	}
+	_, err = db.Exec("ALTER TABLE lockers ADD COLUMN sensor_reverse INTEGER NOT NULL DEFAULT 0 CHECK (sensor_reverse IN (0, 1))")
+	return err
+}
+
+func addSlotSensorPos(db *sql.DB) error {
+	var n int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('slots') WHERE name = 'sensor_pos'").Scan(&n)
+	if err != nil || n > 0 {
+		return err
+	}
+	if _, err := db.Exec("ALTER TABLE slots ADD COLUMN sensor_pos INTEGER CHECK (sensor_pos BETWEEN 1 AND 5)"); err != nil {
+		return err
+	}
+
+	rows, err := db.Query(`SELECT s.id, s.slot_no, l.capacity, l.sensor_start, l.sensor_reverse
+		FROM slots s JOIN lockers l ON l.id = s.locker_id`)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id, slotNo, capacity, start int64
+		reverse                     bool
+	}
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.slotNo, &r.capacity, &r.start, &r.reverse); err != nil {
+			rows.Close()
+			return err
+		}
+		all = append(all, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, r := range all {
+		if _, err := db.Exec("UPDATE slots SET sensor_pos = ? WHERE id = ?", defaultSensorPos(r.slotNo, r.capacity, r.start, r.reverse), r.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func addRequestedLocker(db *sql.DB) error {

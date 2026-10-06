@@ -23,7 +23,7 @@ func (s *Store) FindSensorSlot(ctx context.Context, lockerIP string, slotNo int6
 	SELECT s.id
 	FROM slots s
 	JOIN lockers l ON l.id = s.locker_id
-	WHERE l.ip_address = ? AND s.slot_no = ? AND s.active = 1
+	WHERE l.ip_address = ? AND s.active = 1 AND s.sensor_pos = ?
 	`, lockerIP, slotNo).Scan(&slotID)
 
 	if errors.Is(err, sql.ErrNoRows) {

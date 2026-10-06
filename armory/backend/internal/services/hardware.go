@@ -16,6 +16,7 @@ type Hardware interface {
 	Unlock(ctx context.Context, lockerIP string, slotNo int64) error
 	Signal(ctx context.Context, lockerIP string, signal Signal) error
 	Alarm(ctx context.Context, lockerIP string, on bool) error
+	OpenDoor(ctx context.Context) error
 }
 
 type LogHardware struct{}
@@ -24,7 +25,7 @@ func (LogHardware) Unlock(ctx context.Context, lockerIP string, slotNo int64) er
 	log.Printf("hardware: unlock locker %s, slot %d", lockerIP, slotNo)
 	return nil
 }
-
+ 
 func (LogHardware) Signal(ctx context.Context, lockerIP string, signal Signal) error {
 	log.Printf("hardware: signal %q to locker %s", signal, lockerIP)
 	return nil
@@ -32,5 +33,10 @@ func (LogHardware) Signal(ctx context.Context, lockerIP string, signal Signal) e
 
 func (LogHardware) Alarm(ctx context.Context, lockerIP string, on bool) error {
 	log.Printf("hardware: wrong gun alarm %t on locker %s", on, lockerIP)
+	return nil
+}
+
+func (LogHardware) OpenDoor(ctx context.Context) error {
+	log.Printf("hardware: open door")
 	return nil
 }

@@ -173,3 +173,108 @@ func TestSyncSensorSlot(t *testing.T) {
 		}
 	})
 }
+
+func TestSensorStartShiftsFrameSlots(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	l := newTestLocker(t, st, 5)
+
+	first, err := st.FindSensorSlot(ctx, l.IPAddress, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != l.Slots[0].ID {
+		t.Fatalf("default: frame slot 1 -> %d, want %d", first, l.Slots[0].ID)
+	}
+
+	if err := st.SetSensorLayout(ctx, l.ID, 3, false); err != nil {
+		t.Fatal(err)
+	}
+	for frame, want := range map[int64]int{1: 2, 2: 3, 3: 4} {
+		got, err := st.FindSensorSlot(ctx, l.IPAddress, frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != l.Slots[want].ID {
+			t.Fatalf("frame slot %d -> %d, want slot %d (%d)", frame, got, want+1, l.Slots[want].ID)
+		}
+	}
+}
+
+func TestSlotsBeforeSensorStartReadAsNoSensor(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	l := newTestLocker(t, st, 5)
+	if err := st.SetSensorLayout(ctx, l.ID, 3, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, "UPDATE slots SET reading = 1 WHERE locker_id = ?", l.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	lockers, err := st.ListLockers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int64{2, 2, 1, 1, 1}
+	for i, s := range lockers[0].Slots {
+		if s.Reading != want[i] {
+			t.Fatalf("slot %d reading = %d, want %d", s.SlotNo, s.Reading, want[i])
+		}
+	}
+}
+
+func TestSensorReverseFlipsFrameOrder(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	l := newTestLocker(t, st, 5)
+	if err := st.SetSensorLayout(ctx, l.ID, 3, true); err != nil {
+		t.Fatal(err)
+	}
+	for frame, want := range map[int64]int{1: 4, 2: 3, 3: 2} {
+		got, err := st.FindSensorSlot(ctx, l.IPAddress, frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != l.Slots[want].ID {
+			t.Fatalf("frame slot %d -> %d, want slot %d (%d)", frame, got, want+1, l.Slots[want].ID)
+		}
+	}
+}
+
+func TestSwapSensorsExchangesRouting(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	l := newTestLocker(t, st, 5)
+	if _, err := st.db.ExecContext(ctx, "UPDATE slots SET reading = slot_no % 2 WHERE locker_id = ?", l.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.SwapSensors(ctx, l.ID, 1, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	for frame, want := range map[int64]int{1: 2, 2: 1, 3: 0} {
+		got, err := st.FindSensorSlot(ctx, l.IPAddress, frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != l.Slots[want].ID {
+			t.Fatalf("frame %d -> %d, want slot %d (%d)", frame, got, want+1, l.Slots[want].ID)
+		}
+	}
+	for _, c := range []struct{ slotNo, reading int64 }{{1, 1}, {2, 0}, {3, 1}} {
+		var reading int64
+		err := st.db.QueryRowContext(ctx, "SELECT reading FROM slots WHERE locker_id = ? AND slot_no = ?", l.ID, c.slotNo).Scan(&reading)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reading != c.reading {
+			t.Fatalf("slot %d reading = %d, want %d", c.slotNo, reading, c.reading)
+		}
+	}
+
+	if err := st.SwapSensors(ctx, l.ID, 1, 9); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}

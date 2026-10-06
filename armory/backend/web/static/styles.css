@@ -723,6 +723,54 @@ tr.flash {
   border-radius: 50%;
   background: currentColor;
 }
+.locker-actions {
+  display: flex;
+  gap: 8px;
+}
+.arrange-hint {
+  display: none;
+  margin: 0 20px 16px;
+  color: var(--secondary);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+.locker-card.arranging .arrange-hint {
+  display: block;
+}
+.locker-card.arranging .slot {
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.locker-card.arranging .slot:active {
+  cursor: grabbing;
+}
+.locker-card.arranging .slot.picked::before {
+  filter: drop-shadow(0 0 10px var(--yellow));
+}
+.locker-card.arranging .slot:hover::before {
+  filter: brightness(1.25);
+}
+.sensors-off {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+  color: var(--yellow);
+  font-size: 0.8125rem;
+}
+.sensors-off i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.locker-card:has(.sensors-off) .slot {
+  opacity: 0.45;
+}
 .board-state.is-online {
   background: color-mix(in srgb, var(--green) 12%, transparent);
   color: var(--green);
@@ -966,7 +1014,7 @@ tr.flash {
 }
 .person-row {
   display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) 140px 160px;
+  grid-template-columns: auto minmax(180px, 1fr) 140px 160px auto;
   align-items: center;
   gap: 16px;
   min-height: 72px;
@@ -979,6 +1027,13 @@ tr.flash {
 .person-row:hover {
   background: color-mix(in srgb, var(--surface) 86%, var(--fill));
   transform: translateY(-1px);
+}
+.person-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.person-error:empty {
+  display: none;
 }
 .role-chip {
   justify-self: start;
@@ -1591,4 +1646,129 @@ section + section {
   .toast.is-in {
     animation: none;
   }
+}
+
+.locker-card .slot-row {
+  --plate: #d6d6d2;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 34px 22px;
+  height: 380px;
+  margin: 4px 20px 16px;
+  padding: 18px 16px 48px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background-color: #34373a;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.16) 2.2px, transparent 2.7px);
+  background-size: 14px 14px;
+}
+.locker-card .slot-row-pistol {
+  display: grid;
+  grid-template-columns: repeat(4, 74px);
+  justify-content: center;
+  align-content: center;
+}
+.locker-card .slot-row-pistol .slot {
+  --len: 100px;
+  --thick: 74px;
+}
+.locker-card .slot-row-rifle .slot {
+  --len: 190px;
+  --thick: 68px;
+}
+.locker-card .slot > span {
+  bottom: -38px;
+  height: 30px;
+  padding-top: 13px;
+  box-sizing: border-box;
+  color: #e6e6e3;
+  font-weight: 600;
+}
+.locker-card .slot > span::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 40px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--plate);
+  transform: translateX(-50%);
+}
+.locker-card .slot > em {
+  bottom: -54px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  color: var(--muted, #8e8e93);
+  font-size: 14px;
+}
+.pager-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pager-buttons a {
+  text-decoration: none;
+}
+.pager-off {
+  opacity: 0.4;
+}
+.pager-page {
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.filter-bar label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, #8e8e93);
+}
+.filter-bar select,
+.filter-bar input {
+  min-width: 150px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--separator);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+.filter-actions {
+  display: flex;
+  gap: 8px;
+}
+.filter-actions a {
+  text-decoration: none;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.check-row input {
+  width: auto;
+  min-width: 0;
+}
+.field-hint {
+  margin: 0;
+  color: var(--muted, #8e8e93);
+  font-size: 13px;
 }

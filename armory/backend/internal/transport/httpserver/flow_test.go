@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -201,9 +202,14 @@ func TestAdminPagesLockOnceAnAdminCanSignIn(t *testing.T) {
 		if status, header, _ := anon.do("GET", "/admin/requests", nil, map[string]string{"HX-Request": "true"}); status != http.StatusUnauthorized || header.Get("HX-Redirect") != "/admin/login" {
 			t.Fatalf("htmx request = %d %q", status, header.Get("HX-Redirect"))
 		}
-		for _, path := range []string{"/kiosk", "/admin/login", "/kiosk.webmanifest", "/admin.webmanifest", "/sw.js"} {
+		for _, path := range []string{"/admin/login", "/admin.webmanifest", "/sw.js"} {
 			if status, _, _ := anon.do("GET", path, nil, nil); status != 200 {
 				t.Fatalf("%s = %d, want 200", path, status)
+			}
+		}
+		for _, path := range []string{"/kiosk", "/enroll", "/kiosk.webmanifest"} {
+			if status, _, _ := anon.do("GET", path, nil, nil); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+				t.Fatalf("%s = %d, want 404 or 405", path, status)
 			}
 		}
 		if status, _, _ := anon.do("GET", "/api/me", nil, nil); status != http.StatusUnauthorized {
@@ -211,19 +217,11 @@ func TestAdminPagesLockOnceAnAdminCanSignIn(t *testing.T) {
 		}
 	})
 
-	t.Run("the bare address opens the requester app", func(t *testing.T) {
+	t.Run("the bare address opens the admin area", func(t *testing.T) {
 		a := newApp(t, true)
 		status, header, _ := a.browser(t).do("GET", "/", nil, nil)
-		if status != http.StatusSeeOther || header.Get("Location") != "/kiosk" {
-			t.Fatalf("/ = %d %q, want a redirect to /kiosk", status, header.Get("Location"))
-		}
-	})
-
-	t.Run("the requester app links to nothing in the admin area", func(t *testing.T) {
-		a := newApp(t, true)
-		_, _, body := a.browser(t).do("GET", "/kiosk", nil, nil)
-		if strings.Contains(body, "/admin") {
-			t.Fatal("the kiosk page mentions /admin")
+		if status != http.StatusSeeOther || header.Get("Location") != "/admin" {
+			t.Fatalf("/ = %d %q, want a redirect to /admin", status, header.Get("Location"))
 		}
 	})
 
@@ -508,5 +506,56 @@ func TestPlainHTTPFromOtherDevicesGoesToHTTPS(t *testing.T) {
 	}
 	if got := httpserver.RedirectHTTPS(inner, ""); got == nil {
 		t.Fatal("no TLS address must return the plain handler")
+	}
+}
+
+func TestActivityPageFiltersAndPages(t *testing.T) {
+	a := newApp(t, true)
+	b := a.browser(t)
+	b.adminSignIn()
+
+	status, _, body := b.do("GET", "/admin/activity", nil, nil)
+	if status != 200 || !strings.Contains(body, "Person") || !strings.Contains(body, "Everyone") {
+		t.Fatalf("activity page: %d %s", status, body)
+	}
+	status, _, body = b.do("GET", "/admin/activity?page=99&person=Nobody&type=gun_removed&from=2026-01-01&to=bad", nil, nil)
+	if status != 200 || !strings.Contains(body, "Nothing matches these filters.") {
+		t.Fatalf("filtered activity page: %d %s", status, body)
+	}
+}
+
+func TestAdminSetsSensorLayoutFromTheEditForm(t *testing.T) {
+	a := newApp(t, true)
+	b := a.browser(t)
+	b.adminSignIn()
+
+	path := "/admin/lockers/" + strconv.FormatInt(a.locker.ID, 10)
+	form := func(start, reverse string) url.Values {
+		v := url.Values{"name": {a.locker.Name}, "kind": {a.locker.Kind}, "capacity": {strconv.FormatInt(a.locker.Capacity, 10)}, "sensor_start": {start}}
+		if reverse != "" {
+			v.Set("sensor_reverse", reverse)
+		}
+		return v
+	}
+	hx := map[string]string{"HX-Request": "true"}
+
+	if status, _, body := b.do("POST", path, form("2", "1"), hx); status != 200 {
+		t.Fatalf("save: %d %s", status, body)
+	}
+	l, err := a.store.GetLocker(context.Background(), a.locker.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.SensorStart != 2 || !l.SensorReverse {
+		t.Fatalf("saved layout = %d, %v, want 2, true", l.SensorStart, l.SensorReverse)
+	}
+
+	_, header, _ := b.do("POST", path, form("99", ""), hx)
+	if header.Get("HX-Retarget") == "" {
+		t.Fatal("an out-of-range first sensor slot must show an error")
+	}
+	l, _ = a.store.GetLocker(context.Background(), a.locker.ID)
+	if l.SensorStart != 2 {
+		t.Fatalf("invalid value must not be saved, got %d", l.SensorStart)
 	}
 }

@@ -7,4 +7,5 @@ type Event struct {
 	LockerName string
 	SlotNo     int64
 	Details    string
+	Person     string
 }

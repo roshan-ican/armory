@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	requesterSession = 3 * time.Minute
+	requesterSession = 5 * time.Minute
 	adminSession     = 8 * time.Hour
 )
 

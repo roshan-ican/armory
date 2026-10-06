@@ -203,6 +203,9 @@ func (s *RequestService) Approve(ctx context.Context, adminID, id int64) (models
 			log.Printf("unlock locker %s: %v", req.LockerIP, err)
 		}
 	}
+	if err := s.hw.OpenDoor(ctx); err != nil {
+		log.Printf("open door : %v", err)
+	}
 	s.hub.Publish()
 	return req, nil
 }
@@ -275,6 +278,27 @@ func (s *RequestService) Open(ctx context.Context, userID int64) (RequestView, e
 		return RequestView{}, translateRequestError(err)
 	}
 	return s.view(ctx, req)
+}
+
+func (s *RequestService) Reopen(ctx context.Context, userID int64) (RequestView, error) {
+	v, err := s.Open(ctx, userID)
+	if err != nil || v.Request.Status != models.RequestApproved {
+		return v, err
+	}
+	reading := make(map[int64]int64, len(v.Slots))
+	for _, sl := range v.Slots {
+		reading[sl.SlotNo] = sl.Reading
+	}
+	for _, rs := range v.Request.Slots {
+		if rs.Status == models.SlotChosen && reading[rs.SlotNo] == 1 {
+			log.Printf("request %d: gun %d still in %s, opening again", v.Request.ID, rs.SlotNo, v.Request.LockerName)
+			if err := s.hw.Unlock(ctx, v.Request.LockerIP, rs.SlotNo); err != nil {
+				log.Printf("unlock locker %s: %v", v.Request.LockerIP, err)
+			}
+			break
+		}
+	}
+	return v, nil
 }
 
 func (s *RequestService) Availability(ctx context.Context) (map[string]int64, error) {

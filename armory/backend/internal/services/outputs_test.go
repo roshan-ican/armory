@@ -48,7 +48,7 @@ func TestOutputsTake(t *testing.T) {
 	now := time.Now()
 
 	t.Run("an idle or unknown board gets the keep alive", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		frames := o.take("10.0.0.5", now)
 		if len(frames) != 1 || !bytes.Equal(frames[0], keepAlive) {
 			t.Fatalf("got % x", frames)
@@ -56,7 +56,7 @@ func TestOutputsTake(t *testing.T) {
 	})
 
 	t.Run("a command is sent three times with one sequence number then stops", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		o.PulseUnlock("10.0.0.5")
 		want := encodeFrame(1, openLock, 0)
 		for i := 0; i < commandSends; i++ {
@@ -72,7 +72,7 @@ func TestOutputsTake(t *testing.T) {
 	})
 
 	t.Run("each new command gets the next number and two can go out together", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		o.PulseUnlock("10.0.0.5")
 		o.PulseRight("10.0.0.5")
 		frames := o.take("10.0.0.5", now)
@@ -82,7 +82,7 @@ func TestOutputsTake(t *testing.T) {
 	})
 
 	t.Run("boards do not share numbers", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		o.PulseUnlock("10.0.0.5")
 		o.PulseUnlock("10.0.0.6")
 		if got := o.take("10.0.0.6", now); !bytes.Equal(got[0], encodeFrame(1, openLock, 0)) {
@@ -91,7 +91,7 @@ func TestOutputsTake(t *testing.T) {
 	})
 
 	t.Run("the sequence number wraps past 255 and skips 0", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		log.SetOutput(io.Discard)
 		defer log.SetOutput(os.Stderr)
 		for i := 0; i < 256; i++ {
@@ -103,7 +103,7 @@ func TestOutputsTake(t *testing.T) {
 	})
 
 	t.Run("a wrong gun sounds at once and again every few seconds until it is back", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		now := time.Now()
 		o.SetWrong("10.0.0.5", true)
 		first := o.take("10.0.0.5", now)
@@ -128,7 +128,7 @@ func TestOutputsTake(t *testing.T) {
 	})
 
 	t.Run("asking again while it is already wrong does not start a second alarm", func(t *testing.T) {
-		o := NewOutputs(nil, 0, nil)
+		o := NewOutputs(nil, 0, nil, "")
 		o.SetWrong("10.0.0.5", true)
 		o.SetWrong("10.0.0.5", true)
 		if got := o.get("10.0.0.5").seq; got != 1 {
@@ -150,7 +150,7 @@ func TestOutputsRunSendsFramesFromTheSharedSocket(t *testing.T) {
 	defer out.Close()
 
 	port := board.LocalAddr().(*net.UDPAddr).Port
-	o := NewOutputs(out, port, func(context.Context) ([]string, error) { return []string{"127.0.0.1"}, nil })
+	o := NewOutputs(out, port, func(context.Context) ([]string, error) { return []string{"127.0.0.1"}, nil }, "")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go o.Run(ctx)

@@ -46,7 +46,6 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	u, err := s.users.Create(r.Context(),
 		r.FormValue("name"), r.FormValue("service_no"), r.FormValue("role"))
 	if errors.Is(err, services.ErrNameRequired) ||
-		errors.Is(err, services.ErrServiceNoRequired) ||
 		errors.Is(err, services.ErrInvalidRole) ||
 		errors.Is(err, services.ErrUserExists) {
 		formError(w, err)
@@ -77,22 +76,17 @@ func (s *Server) userFor(w http.ResponseWriter, r *http.Request) (models.User, b
 	return u, true
 }
 
-func (s *Server) enrollPage(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/kiosk?enroll=1", http.StatusSeeOther)
-}
-
 func (s *Server) requestEnrollment(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name        string      `json:"name"`
-		ServiceNo   string      `json:"service_no"`
 		Descriptors [][]float64 `json:"descriptors"`
 	}
 	if !readJSON(w, r, &body) {
 		return
 	}
-	err := s.face.RequestEnrollment(r.Context(), body.Name, body.ServiceNo, body.Descriptors)
+	err := s.face.RequestEnrollment(r.Context(), body.Name, body.Descriptors)
 	if errors.Is(err, services.ErrInvalidDescriptor) || errors.Is(err, services.ErrNameRequired) ||
-		errors.Is(err, services.ErrServiceNoRequired) || errors.Is(err, services.ErrEnrollmentPending) {
+		errors.Is(err, services.ErrEnrollmentPending) || errors.Is(err, services.ErrFaceAlreadyEnrolled) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -144,4 +138,27 @@ func (s *Server) decideEnrollment(approve bool) http.HandlerFunc {
 		s.hub.Publish()
 		w.Header().Set("HX-Refresh", "true")
 	}
+}
+
+func (s *Server) removeUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	err = s.users.Remove(r.Context(), id)
+	if errors.Is(err, services.ErrUserNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if errors.Is(err, services.ErrUserBusy) || errors.Is(err, services.ErrCannotRemoveAdmin) {
+		formErrorAt(w, err, "#person-error-"+r.PathValue("id"))
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	s.hub.Publish()
+	w.Header().Set("HX-Refresh", "true")
 }

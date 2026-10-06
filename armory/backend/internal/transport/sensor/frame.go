@@ -24,6 +24,8 @@ func decodeSensorFrame(b []byte) ([]byte, error) {
 	}
 
 	out := make([]byte, slotCount)
-	copy(out, slots)
+	for i, s := range slots {
+		out[slotCount-1-i] = s
+	}
 	return out, nil
 }

@@ -90,7 +90,7 @@ func (s *Server) apiError(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) apiMe(w http.ResponseWriter, r *http.Request, sess services.Session) {
-	writeJSON(w, map[string]any{"name": sess.Name, "service_no": sess.ServiceNo, "role": sess.Role})
+	writeJSON(w, map[string]any{"name": sess.Name, "role": sess.Role})
 }
 
 func (s *Server) apiAvailability(w http.ResponseWriter, r *http.Request, sess services.Session) {
@@ -142,7 +142,7 @@ func (s *Server) apiCreateRequest(w http.ResponseWriter, r *http.Request, sess s
 }
 
 func (s *Server) apiCurrentRequest(w http.ResponseWriter, r *http.Request, sess services.Session) {
-	v, err := s.requests.Open(r.Context(), sess.UserID)
+	v, err := s.requests.Reopen(r.Context(), sess.UserID)
 	if err != nil {
 		s.apiError(w, err)
 		return

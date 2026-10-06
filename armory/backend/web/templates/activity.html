@@ -4,35 +4,59 @@
     <h1>Activity</h1>
     <p>When guns were taken and put back.</p>
   </div>
-  <span class="record-count">{{len .Events}} recent</span>
 </div>
+<form class="filter-bar" method="get" action="/admin/activity">
+  <label>Person
+    <select name="person">
+      <option value="">Everyone</option>
+      {{range .View.People}}<option value="{{.}}" {{if eq . $.View.Filter.Person}}selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label>Locker
+    <select name="locker">
+      <option value="">All lockers</option>
+      {{range .View.Lockers}}<option value="{{.}}" {{if eq . $.View.Filter.Locker}}selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label>Event
+    <select name="type">
+      <option value="">All events</option>
+      {{range .View.Types}}<option value="{{.Value}}" {{if eq .Value $.View.Filter.Type}}selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </label>
+  <label>From <input type="date" name="from" value="{{.View.Filter.From}}" /></label>
+  <label>To <input type="date" name="to" value="{{.View.Filter.To}}" /></label>
+  <div class="filter-actions">
+    <button class="button-primary" type="submit">Filter</button>
+    {{if .View.Query}}<a class="button-secondary" href="/admin/activity">Clear</a>{{end}}
+  </div>
+</form>
+
+<div id="activity-body" class="live-region" hx-get="/admin/activity?page={{.View.Page}}&{{.View.Query}}" hx-trigger="armory:changed from:body" hx-select="#activity-body" hx-swap="outerHTML">
 <div class="panel table-panel">
   <div class="table-scroll">
     <table>
       <thead>
         <tr>
           <th>Time</th>
+          <th>Person</th>
           <th>Locker</th>
           <th>Slot</th>
           <th>Event</th>
         </tr>
       </thead>
-      <tbody
-        id="activity-rows"
-        class="live-region"
-        hx-get="/admin/activity"
-        hx-trigger="armory:changed from:body"
-        hx-select="#activity-rows"
-        hx-swap="outerHTML"
-      >
-        {{range .Events}}
+      <tbody id="activity-rows">
+        {{range .View.Events}}
         <tr>
           <td><time datetime="{{.OccurredAt}}">{{.OccurredAt}}</time></td>
+          <td>{{if .Person}}{{.Person}}{{else}}<span class="muted">—</span>{{end}}</td>
           <td>{{if .LockerName}}{{.LockerName}}{{else}}<span class="muted">—</span>{{end}}</td>
           <td>{{.SlotNo}}</td>
           <td>
             {{if eq .Type "gun_removed"}}<span class="status status-taken"><i></i>Taken</span>
             {{else if eq .Type "gun_returned"}}<span class="status status-returned"><i></i>Returned</span>
+            {{else if eq .Type "wrong_gun"}}<span class="status status-taken"><i></i>Wrong gun</span>
+            {{else if eq .Type "request_expired"}}<span class="status status-detecting"><i></i>Not collected</span>
             {{else if eq .Type "sensor_fault"}}<span class="status status-detecting"><i></i>Sensor not detecting</span>
             {{else if eq .Type "sensor_recovered"}}<span class="status status-out"><i></i>Sensor detecting again</span>
             {{else}}{{.Type}}{{end}}
@@ -41,11 +65,22 @@
         </tr>
         {{else}}
         <tr>
-          <td colspan="4"><span class="muted">Nothing has happened yet.</span></td>
+          <td colspan="5"><span class="muted">{{if .View.Query}}Nothing matches these filters.{{else}}Nothing has happened yet.{{end}}</span></td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
+</div>
+{{if .View.Total}}
+<nav class="pager" aria-label="Activity pages">
+  <span class="pager-count">Showing {{.View.First}}–{{.View.Last}} of {{.View.Total}}</span>
+  <div class="pager-buttons">
+    {{if .View.HasPrev}}<a class="button-secondary" href="/admin/activity?page={{.View.Prev}}&{{.View.Query}}">‹ Newer</a>{{else}}<span class="button-secondary pager-off" aria-disabled="true">‹ Newer</span>{{end}}
+    <span class="pager-page">Page {{.View.Page}} of {{.View.Pages}}</span>
+    {{if .View.HasNext}}<a class="button-secondary" href="/admin/activity?page={{.View.Next}}&{{.View.Query}}">Older ›</a>{{else}}<span class="button-secondary pager-off" aria-disabled="true">Older ›</span>{{end}}
+  </div>
+</nav>
+{{end}}
 </div>
 {{end}}
