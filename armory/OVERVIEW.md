@@ -7,7 +7,7 @@ Armory tracks which guns are in which locker, lets people request a gun with the
 | Part | What it is | Where it runs |
 |---|---|---|
 | **Server** | One Go program (`armory/backend`). Holds the database, the rules, the web pages and the hardware commands. | The PC |
-| **Kiosk (requester app)** | Svelte web app wrapped as an Android app (Capacitor). Face check, pick a locker, send a request. | The tablet |
+| **Kiosk (requester app)** | Native Kotlin Android app (`kiosk-native`). Scans the face on the tablet, then picks a locker and sends a request. | The tablet |
 | **Admin app** | Installable web app under `/admin/`. Lockers, requests, activity, people. | PC or any browser |
 | **Sensor boards** | One board per locker with 3 slot sensors. Sends a UDP packet about 10 times a second and listens for the 500 ms output frame. | Each locker |
 
@@ -55,7 +55,7 @@ Frame (6 bytes): `24 seq open buzzer crc 23`. The checksum is CRC-8/MAXIM over t
 
 ## 5. The two apps
 
-**Kiosk (tablet).** The Android app loads `https://<PC-IP>:8443/kiosk`. The picker is one screen with no scrolling: lockers side by side, each with a Detecting pill, an "N available" count, a row of gun icons with slot numbers, and a legend. It refreshes live when a sensor changes.
+**Kiosk (tablet).** The native Kotlin app calls the server's API at `https://<PC-IP>:8443`. The picker is one screen with no scrolling: lockers side by side, each with a Detecting pill, an "N available" count, a row of gun icons with slot numbers, and a legend. It refreshes live when a sensor changes.
 
 **Admin.** Sign in with a username and password at `/admin/login`. Pages: **Lockers** (live guns, add and edit lockers), **Requests** (approve or decline), **Activity** (event log), **People** (enrol and manage faces). It uses the same dark look as the Android app. Press **Enable alerts** once to get system notifications for new requests while the admin app is open in the background.
 
@@ -68,7 +68,7 @@ go run ./cmd/server
 
 - HTTP on `:8080`, HTTPS on `:8443` (the camera needs HTTPS or localhost), sensors on UDP `:47810`.
 - `go run ./cmd/certgen` makes the certificates. The tablet installs the CA from `/ca.crt` once.
-- Templates and the built frontend are baked into the program, so restart the server after any change. After a frontend change, run `npm run build` in `armory/frontend` first.
+- Templates are baked into the program, so restart the server after any change. The tablet app is separate: after a change in `armory/kiosk-native`, rebuild and reinstall the APK (see `DEPLOY.md`).
 - `ARMORY_SENSOR_DEBUG=1` logs every raw sensor frame. The server logs each request step and each command it sends.
 - Checks: `gofmt -l internal`, `go vet ./...`, `go test ./...`.
 
