@@ -11,3 +11,4 @@ armory/deploy/release/
 armory/deploy/ArmoryRelease.zip
 armory/faceserver/photos/
 __pycache__/
+armory/faceserver/models/
