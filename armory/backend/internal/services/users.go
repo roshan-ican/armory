@@ -114,3 +114,15 @@ func (s *UserService) Remove(ctx context.Context, id int64) error {
 		return err
 	}
 }
+
+func (s *UserService) Rename(ctx context.Context, id int64, name string) error {
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		return ErrNameRequired
+	}
+	err := s.store.Rename(ctx, id, name)
+	if errors.Is(err, database.ErrNotFound) {
+		return ErrUserNotFound
+	}
+	return err
+}

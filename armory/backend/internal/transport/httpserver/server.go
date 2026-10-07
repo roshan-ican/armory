@@ -75,6 +75,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("GET /admin/users/badge", s.adminOnly(s.peopleBadge))
 	mux.HandleFunc("POST /admin/users/{id}/remove", s.adminOnly(s.removeUser))
+	mux.HandleFunc("POST /admin/users/{id}/rename", s.adminOnly(s.renameUser))
 	mux.HandleFunc("POST /admin/enrollments/{id}/approve", s.adminOnly(s.decideEnrollment(true)))
 	mux.HandleFunc("POST /admin/enrollments/{id}/reject", s.adminOnly(s.decideEnrollment(false)))
 	mux.HandleFunc("GET /admin/requests", s.adminOnly(s.requestsPage))

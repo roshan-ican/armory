@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"armory/internal/models"
 	"armory/internal/services"
 )
 
@@ -40,40 +39,6 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		"Users":   users,
 		"Pending": pending,
 	})
-}
-
-func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
-	u, err := s.users.Create(r.Context(),
-		r.FormValue("name"), r.FormValue("service_no"), r.FormValue("role"))
-	if errors.Is(err, services.ErrNameRequired) ||
-		errors.Is(err, services.ErrInvalidRole) ||
-		errors.Is(err, services.ErrUserExists) {
-		formError(w, err)
-		return
-	}
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	s.render(w, "users", "user_row", u)
-}
-
-func (s *Server) userFor(w http.ResponseWriter, r *http.Request) (models.User, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.NotFound(w, r)
-		return models.User{}, false
-	}
-	u, err := s.users.Get(r.Context(), id)
-	if errors.Is(err, services.ErrUserNotFound) {
-		http.NotFound(w, r)
-		return models.User{}, false
-	}
-	if err != nil {
-		serverError(w, err)
-		return models.User{}, false
-	}
-	return u, true
 }
 
 func (s *Server) requestEnrollment(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +117,29 @@ func (s *Server) removeUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, services.ErrUserBusy) || errors.Is(err, services.ErrCannotRemoveAdmin) {
+		formErrorAt(w, err, "#person-error-"+r.PathValue("id"))
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	s.hub.Publish()
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) renameUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	err = s.users.Rename(r.Context(), id, r.FormValue("name"))
+	if errors.Is(err, services.ErrUserNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if errors.Is(err, services.ErrNameRequired) {
 		formErrorAt(w, err, "#person-error-"+r.PathValue("id"))
 		return
 	}

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"armory/internal/services"
 )
@@ -36,6 +37,7 @@ func (s *Server) matchFace(w http.ResponseWriter, r *http.Request) {
 		"matched":  true,
 		"name":     res.User.Name,
 		"role":     res.User.Role,
+		"greeting": services.Greeting(time.Now()),
 		"distance": res.Distance,
 	})
 }

@@ -63,8 +63,10 @@ class Api(private val baseUrl: String) {
     fun match(embedding: FloatArray): Person? {
         val out = JSONObject(call("POST", "/face/match", JSONObject().put("descriptor", embedding.toJson())))
         if (!out.optBoolean("matched")) return null
-        return Person(out.getString("name"))
+        return Person(out.getString("name"), out.optString("greeting"))
     }
+
+    fun me(): Person = Person(JSONObject(call("GET", "/api/me")).getString("name"))
 
     fun logout() {
         runCatching { call("POST", "/api/logout") }
@@ -102,11 +104,13 @@ class Api(private val baseUrl: String) {
         call("POST", "/enroll", body)
     }
 
-    fun watch(onOpen: () -> Unit, onChange: () -> Unit, onDrop: () -> Unit): EventSource {
-        val req = Request.Builder().url("$baseUrl/events").header("Accept", "text/event-stream").build()
+    fun watch(onOpen: () -> Unit, onChange: () -> Unit, onSay: (String) -> Unit, onDrop: () -> Unit): EventSource {
+        val req = Request.Builder().url("$baseUrl/events?speech=1").header("Accept", "text/event-stream").build()
         val listener = object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) = onOpen()
-            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) = onChange()
+            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
+                if (type == "say") onSay(data) else onChange()
+            }
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) = onDrop()
             override fun onClosed(eventSource: EventSource) = onDrop()
         }

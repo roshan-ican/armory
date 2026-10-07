@@ -54,6 +54,21 @@
     {{range .Users}}{{template "user_row" .}}{{end}}
   </div>
 </section>
+<script>
+  function toggleRename(id, on) {
+    const row = document.getElementById("person-" + id);
+    const form = row.querySelector(".rename-form");
+    row.querySelector(".person-name").hidden = on;
+    row.querySelector(".rename-open").hidden = on;
+    form.hidden = !on;
+    row.querySelector(".person-error").textContent = "";
+    if (on) {
+      const input = form.querySelector("input");
+      input.focus();
+      input.select();
+    }
+  }
+</script>
 {{end}}
 
 {{define "user_row"}}
@@ -61,7 +76,15 @@
   <div class="person-avatar person-avatar-small" aria-hidden="true">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.7-5 3.2-7.5 7.5-7.5s6.8 2.5 7.5 7.5"/></svg>
   </div>
-  <div class="person-primary"><strong>{{.Name}}</strong>{{if eq .Role "admin"}}<span><code>{{.ServiceNo}}</code></span>{{end}}</div>
+  <div class="person-primary">
+    <strong class="person-name">{{.Name}}</strong>
+    {{if eq .Role "admin"}}<span><code>{{.ServiceNo}}</code></span>{{end}}
+    <form class="rename-form" hidden hx-post="/admin/users/{{.ID}}/rename" hx-swap="none" onkeydown="if (event.key === 'Escape') toggleRename({{.ID}}, false)">
+      <input name="name" value="{{.Name}}" maxlength="80" required autocomplete="off" aria-label="Name for {{.Name}}">
+      <button class="button-primary" type="submit">Save</button>
+      <button class="button-secondary" type="button" onclick="toggleRename({{.ID}}, false)">Cancel</button>
+    </form>
+  </div>
   <span class="role-chip">{{if eq .Role "admin"}}Administrator{{else}}Requester{{end}}</span>
   <div class="access-state">
     {{if eq .Role "admin"}}
@@ -72,9 +95,12 @@
       <span class="status status-muted"><i></i>Not enrolled</span>
     {{end}}
   </div>
-  {{if ne .Role "admin"}}
-  <button class="button-danger" hx-post="/admin/users/{{.ID}}/remove" hx-swap="none" hx-confirm="Remove {{.Name}}? They will no longer be able to use the armory.">Remove</button>
+  <div class="person-actions">
+    <button class="button-secondary rename-open" type="button" onclick="toggleRename({{.ID}}, true)">Rename</button>
+    {{if ne .Role "admin"}}
+    <button class="button-danger" hx-post="/admin/users/{{.ID}}/remove" hx-swap="none" hx-confirm="Remove {{.Name}}? They will no longer be able to use the armory.">Remove</button>
+    {{end}}
+  </div>
   <p id="person-error-{{.ID}}" class="form-error person-error" role="alert"></p>
-  {{end}}
 </article>
 {{end}}

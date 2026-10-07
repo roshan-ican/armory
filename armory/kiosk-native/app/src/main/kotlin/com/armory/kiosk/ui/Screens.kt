@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -54,7 +53,6 @@ import com.armory.kiosk.R
 import com.armory.kiosk.data.GunRequest
 import com.armory.kiosk.data.Locker
 import com.armory.kiosk.data.Slot
-import com.armory.kiosk.face.ChallengeKind
 import com.armory.kiosk.face.ScanState
 import java.util.Calendar
 
@@ -208,10 +206,11 @@ private fun FaceStep(model: KioskViewModel, state: UiState, granted: Boolean) {
 @Composable
 private fun WelcomeStep(model: KioskViewModel, state: UiState) {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    val greeting = if (hour < 12) "morning" else if (hour < 18) "afternoon" else "evening"
+    val local = if (hour < 12) "morning" else if (hour < 18) "afternoon" else "evening"
+    val greeting = state.person?.greeting.orEmpty().ifEmpty { "Good $local" }
     Screen {
         Symbol("✓", Palette.Green)
-        Copy("VERIFIED", "Good $greeting, ${state.person?.name?.substringBefore(' ').orEmpty()}", "Your identity has been confirmed.")
+        Copy("VERIFIED", "$greeting, ${state.person?.name?.substringBefore(' ').orEmpty()}", "Your identity has been confirmed.")
         PrimaryButton("Continue  →", enabled = !state.busy, onClick = { model.loadCatalog() })
         ErrorLine(state.error)
     }
@@ -222,14 +221,6 @@ fun toneOf(locker: Locker, slot: Slot): Color = when {
     slot.reading == 1 -> Palette.Green
     slot.reading == 0 -> Palette.Red
     else -> Palette.Grey
-}
-
-private fun slotLabel(locker: Locker, slot: Slot): String = when {
-    slot.available -> "Available"
-    slot.takenBy.isNotEmpty() -> "Taken by ${slot.takenBy}"
-    !locker.online || slot.reading == 2 -> "Sensor not there"
-    slot.reading == 0 -> "Missing"
-    else -> "No data yet"
 }
 
 @Composable

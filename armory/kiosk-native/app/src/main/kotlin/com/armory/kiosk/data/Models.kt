@@ -30,6 +30,6 @@ data class GunRequest(
         chosen.filter { status == null || it.status == status }.map { it.no }
 }
 
-data class Person(val name: String)
+data class Person(val name: String, val greeting: String = "")
 
 class ApiException(val status: Int, message: String) : Exception(message)

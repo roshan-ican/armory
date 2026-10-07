@@ -189,3 +189,18 @@ func (s *Store) DeactivateRequester(ctx context.Context, id int64) error {
 	}
 	return tx.Commit()
 }
+
+func (s *Store) Rename(ctx context.Context, id int64, name string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE users SET name = ?, updated_at = ? WHERE id = ? AND active = 1", name, now(), id)
+	if err != nil {
+		return err
+	}
+	changed, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

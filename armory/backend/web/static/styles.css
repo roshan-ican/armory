@@ -1028,6 +1028,25 @@ tr.flash {
   background: color-mix(in srgb, var(--surface) 86%, var(--fill));
   transform: translateY(-1px);
 }
+.person-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rename-form[hidden],
+.person-name[hidden],
+.rename-open[hidden] {
+  display: none;
+}
+.rename-form input {
+  width: min(260px, 100%);
+}
 .person-error {
   grid-column: 1 / -1;
   margin: 0;
@@ -1059,7 +1078,7 @@ tr.flash {
   .enrollment-actions button { flex: 1; }
   .enrollment-error { grid-column: 1 / -1; }
   .person-row { grid-template-columns: auto 1fr; }
-  .role-chip, .access-state { grid-column: 2; }
+  .role-chip, .access-state, .person-actions { grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) {
   .enrollment-card { animation: none; }

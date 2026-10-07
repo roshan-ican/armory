@@ -30,7 +30,6 @@ class Embedder(context: Context, asset: String = MODEL_ASSET) {
         pixels = IntArray(width * height)
     }
 
-    val dimensions: Int get() = outputSize
     val inputSize: Int get() = width
 
     @Synchronized

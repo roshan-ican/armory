@@ -54,6 +54,7 @@ data class UiState(
 class KioskViewModel(app: Application) : AndroidViewModel(app) {
     private val api = Api(BuildConfig.SERVER_URL)
     private val embedder: Embedder? = if (Embedder.hasModel(app)) Embedder(app) else null
+    private val speaker = Speaker(app)
 
     private val _state = MutableStateFlow(UiState(modelMissing = embedder == null))
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -64,6 +65,7 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
     private var stream: EventSource? = null
     private var streamJob: Job? = null
     private var lastChange = 0L
+    private var lastPersonCheck = 0L
 
     init {
         beginFace()
@@ -112,6 +114,7 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         _state.update { it.copy(person = person) }
+        speaker.say("${person.greeting.ifEmpty { "Welcome" }} ${person.name.substringBefore(' ')}.")
         go(Step.WELCOME)
         try {
             val current = withContext(Dispatchers.IO) { api.currentRequest() }
@@ -256,6 +259,23 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun refreshPerson() {
+        val known = _state.value.person ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastPersonCheck < 3000) return
+        lastPersonCheck = now
+        viewModelScope.launch {
+            val fresh = try {
+                withContext(Dispatchers.IO) { api.me() }
+            } catch (e: ApiException) {
+                return@launch
+            }
+            if (fresh.name != known.name) {
+                _state.update { if (it.person != null) it.copy(person = it.person.copy(name = fresh.name)) else it }
+            }
+        }
+    }
+
     private fun startStream() {
         streamJob = viewModelScope.launch {
             while (isActive) {
@@ -270,9 +290,11 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
                         if (now - lastChange > 150) {
                             lastChange = now
                             if (browsing()) refreshCatalog()
+                            refreshPerson()
                         }
                         _state.update { it.copy(connected = true) }
                     },
+                    onSay = { text -> speaker.say(text) },
                     onDrop = {
                         _state.update { it.copy(connected = false) }
                         closed.complete(Unit)
@@ -294,6 +316,7 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         stream?.cancel()
         streamJob?.cancel()
+        speaker.shutdown()
         embedder?.close()
     }
 

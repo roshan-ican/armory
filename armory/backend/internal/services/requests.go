@@ -6,6 +6,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"time"
 
 	"armory/internal/database"
 	"armory/internal/live"
@@ -203,9 +204,12 @@ func (s *RequestService) Approve(ctx context.Context, adminID, id int64) (models
 			log.Printf("unlock locker %s: %v", req.LockerIP, err)
 		}
 	}
+	doorOpened := true
 	if err := s.hw.OpenDoor(ctx); err != nil {
 		log.Printf("open door : %v", err)
+		doorOpened = false
 	}
+	s.hub.Say(ApprovedMessage(req.UserName, req.LockerName, nos, doorOpened, time.Now()))
 	s.hub.Publish()
 	return req, nil
 }
@@ -348,6 +352,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 		if id != 0 {
 			log.Printf("request %d: slot %d emptied, a chosen gun was taken (all taken: %t)", id, slotID, done)
 			s.signalSlot(ctx, slotID, SignalCorrect)
+			s.announceCorrect(ctx, id, slotID)
 			s.hub.Publish()
 			return
 		}
@@ -365,6 +370,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 			log.Printf("record wrong gun slot %d: %v", slotID, err)
 			return
 		}
+		s.hub.Say(WrongPickMessage(approved.UserName, info.SlotNo, pendingSlotNumbers(approved.Slots)))
 		s.hub.Publish()
 	case 1:
 		id, done, err := s.store.MarkReturned(ctx, slotID)
@@ -377,6 +383,18 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 			s.hub.Publish()
 		}
 	}
+}
+
+func (s *RequestService) announceCorrect(ctx context.Context, requestID, slotID int64) {
+	req, err := s.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return
+	}
+	info, err := s.store.GetSlotInfo(ctx, slotID)
+	if err != nil {
+		return
+	}
+	s.hub.Say(CorrectPickMessage(req.UserName, info.SlotNo))
 }
 
 func (s *RequestService) signalSlot(ctx context.Context, slotID int64, signal Signal) {
