@@ -60,6 +60,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 	}
 	defer sensorConn.Close()
 	sensors := services.NewSensorService(store, hub)
+	lockers.OnSensorEnabled(sensors.RequestResync)
 
 	outputs := services.NewOutputs(sensorConn, boardPort(cfg.SensorAddr), func(ctx context.Context) ([]string, error) {
 		all, err := store.ListLockers(ctx)

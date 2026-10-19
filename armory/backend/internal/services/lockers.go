@@ -11,7 +11,12 @@ import (
 )
 
 type LockerService struct {
-	store *database.Store
+	store           *database.Store
+	onSensorEnabled func(lockerIP string)
+}
+
+func (s *LockerService) OnSensorEnabled(fn func(lockerIP string)) {
+	s.onSensorEnabled = fn
 }
 
 func NewLockerService(store *database.Store) *LockerService {
@@ -119,6 +124,9 @@ func (s *LockerService) SetSensorDisabled(ctx context.Context, id, slotNo int64,
 		return models.Locker{}, ErrInvalidSlot
 	case err != nil:
 		return models.Locker{}, err
+	}
+	if !disabled && l.IPAddress != "" && s.onSensorEnabled != nil {
+		s.onSensorEnabled(l.IPAddress)
 	}
 	return s.Get(ctx, id)
 }

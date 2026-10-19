@@ -48,6 +48,10 @@ func Listen(conn net.PacketConn, svc *services.SensorService) error {
 			lastSeen[board] = time.Now()
 		}
 
+		if svc.TakeResync(board) {
+			tracker.Forget(board)
+		}
+
 		if !tracker.Seen(board) {
 			tracker.Update(board, slots)
 			log.Printf("board %s connected: slots %v", board, slots)

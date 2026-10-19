@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"armory/internal/database"
 	"armory/internal/live"
@@ -12,6 +13,8 @@ type SensorService struct {
 	store    *database.Store
 	hub      *live.Hub
 	onChange func(ctx context.Context, slotID int64, reading byte)
+	mu       sync.Mutex
+	resync   map[string]bool
 }
 
 func (s *SensorService) OnSlotChange(fn func(ctx context.Context, slotID int64, reading byte)) {
@@ -19,7 +22,21 @@ func (s *SensorService) OnSlotChange(fn func(ctx context.Context, slotID int64, 
 }
 
 func NewSensorService(store *database.Store, hub *live.Hub) *SensorService {
-	return &SensorService{store: store, hub: hub}
+	return &SensorService{store: store, hub: hub, resync: make(map[string]bool)}
+}
+
+func (s *SensorService) RequestResync(lockerIP string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resync[lockerIP] = true
+}
+
+func (s *SensorService) TakeResync(lockerIP string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	v := s.resync[lockerIP]
+	delete(s.resync, lockerIP)
+	return v
 }
 
 func (s *SensorService) Seen(ctx context.Context, lockerIP string) error {
