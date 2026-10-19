@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"armory/internal/models"
 	"armory/internal/services"
@@ -30,6 +31,8 @@ type requestJSON struct {
 	ExpectedReturnAt string       `json:"expected_return_at"`
 	Slots            []slotJSON   `json:"slots"`
 	Wrong            []int64      `json:"wrong"`
+	CloseNote        string       `json:"close_note"`
+	Closed           bool         `json:"closed"`
 }
 
 func toJSON(v services.RequestView) requestJSON {
@@ -42,6 +45,8 @@ func toJSON(v services.RequestView) requestJSON {
 		ExpectedReturnAt: v.Request.ExpectedReturnAt,
 		Slots:            []slotJSON{},
 		Wrong:            []int64{},
+		CloseNote:        v.Request.CloseNote,
+		Closed:           v.Request.ClosedAt != "",
 	}
 	for _, sl := range v.Request.Slots {
 		out.Chosen = append(out.Chosen, chosenJSON{No: sl.SlotNo, Status: sl.Status})
@@ -72,6 +77,7 @@ func requestErrorStatus(err error) (int, bool) {
 		return http.StatusNotFound, true
 	case errors.Is(err, services.ErrRequestOpen),
 		errors.Is(err, services.ErrRequestClosed),
+		errors.Is(err, services.ErrMaintenanceActive),
 		errors.Is(err, services.ErrNoneAvailable),
 		errors.Is(err, services.ErrGunUnavailable):
 		return http.StatusConflict, true
@@ -109,7 +115,7 @@ func (s *Server) apiAvailability(w http.ResponseWriter, r *http.Request, sess se
 func (s *Server) apiCatalog(w http.ResponseWriter, r *http.Request, sess services.Session) {
 	items, err := s.requests.Catalog(r.Context())
 	if err != nil {
-		serverError(w, err)
+		s.apiError(w, err)
 		return
 	}
 	writeJSON(w, items)
@@ -181,21 +187,79 @@ func (s *Server) apiCancelRequest(w http.ResponseWriter, r *http.Request, sess s
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+func (s *Server) apiCloseRequest(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "request not found")
+		return
+	}
+	problems, err := s.requests.Close(r.Context(), sess.UserID, id, false)
+	if err != nil {
+		s.apiError(w, err)
+		return
+	}
+	if problems == nil {
+		problems = []string{}
+	}
+	writeJSON(w, map[string]any{"ok": len(problems) == 0, "problems": problems})
+}
+
+func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request) {
+	target := "#request-error-" + r.PathValue("id")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	sess, ok := s.session(r)
+	if !ok || !sess.IsAdmin() {
+		formErrorAt(w, services.ErrNotAdmin, target)
+		return
+	}
+	problems, err := s.requests.Close(r.Context(), sess.UserID, id, r.FormValue("force") == "1")
+	if _, known := requestErrorStatus(err); known {
+		formErrorAt(w, err, target)
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if len(problems) > 0 {
+		formErrorAt(w, errors.New(strings.Join(problems, " ")), target)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) requestsPage(w http.ResponseWriter, r *http.Request) {
 	pending, err := s.requests.Pending(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	recent, err := s.requests.Recent(r.Context())
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	history, err := s.requests.HistoryPage(r.Context(), page)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	maintenance, err := s.maintain.Requested(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	awaiting, err := s.requests.AwaitingClose(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
 	}
 	s.render(w, "requests", "layout", map[string]any{
-		"Title":   "Requests",
-		"Pending": pending,
-		"History": recent,
+		"Title":       "Requests",
+		"Pending":     pending,
+		"Awaiting":    awaiting,
+		"Maintenance": maintenance,
+		"History":     history,
 	})
 }
 
@@ -205,9 +269,19 @@ func (s *Server) requestsBadge(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	maintenance, err := s.maintain.Requested(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	awaiting, err := s.requests.AwaitingClose(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if len(pending) > 0 {
-		w.Write([]byte(strconv.Itoa(len(pending))))
+	if n := len(pending) + len(maintenance) + len(awaiting); n > 0 {
+		w.Write([]byte(strconv.Itoa(n)))
 	}
 }
 

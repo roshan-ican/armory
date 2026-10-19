@@ -47,10 +47,12 @@ func serve(ctx context.Context, cfg config.Config) error {
 	go runBackups(ctx, db, filepath.Dir(cfg.DBPath))
 
 	store := database.NewStore(db)
+	go runRetention(ctx, store)
 	lockers := services.NewLockerService(store)
 	activity := services.NewActivityService(store)
 	users := services.NewUserService(store)
 	face := services.NewFaceService(store)
+	face.Warm(ctx)
 	hub := live.NewHub()
 	sensorConn, err := net.ListenPacket("udp", cfg.SensorAddr)
 	if err != nil {
@@ -80,7 +82,9 @@ func serve(ctx context.Context, cfg config.Config) error {
 	sensors.OnSlotChange(requests.SlotChanged)
 	sessions := services.NewSessions()
 
-	srv, err := httpserver.New(lockers, activity, users, face, requests, sessions, hub)
+	maintenance := services.NewMaintenanceService(store, outputs, hub)
+
+	srv, err := httpserver.New(lockers, activity, users, face, requests, maintenance, sessions, hub)
 	if err != nil {
 		return err
 	}

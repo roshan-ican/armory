@@ -50,7 +50,7 @@
   <div class="section-heading">
     <div><h2 id="active-title">Active people</h2><p>Accounts currently recognized by the system.</p></div>
   </div>
-  <div class="people-list" id="user-rows">
+  <div class="people-list live-region" id="user-rows" hx-get="/admin/users" hx-trigger="armory:changed[!document.querySelector('.rename-form:not([hidden])')] from:body" hx-select="#user-rows" hx-swap="outerHTML">
     {{range .Users}}{{template "user_row" .}}{{end}}
   </div>
 </section>
@@ -94,11 +94,31 @@
     {{else}}
       <span class="status status-muted"><i></i>Not enrolled</span>
     {{end}}
+    {{if eq .MaintenanceStatus "requested"}}
+      <span class="status status-waiting"><i></i>Maintenance requested</span>
+    {{else if eq .MaintenanceStatus "assigned"}}
+      <span class="status status-waiting"><i></i>Maintenance assigned</span>
+    {{else if eq .MaintenanceStatus "active"}}
+      <span class="status status-in"><i></i>On maintenance</span>
+    {{end}}
   </div>
   <div class="person-actions">
+    {{if eq .Role "requester"}}
+      {{if .MaintenanceID}}
+      <button class="button-secondary" hx-post="/admin/maintenance/{{.MaintenanceID}}/cancel" hx-swap="none"
+        hx-confirm="{{.Name}} will no longer be let in for this maintenance job."
+        data-confirm-title="Cancel maintenance?" data-confirm-label="Cancel job" data-confirm-dismiss="Keep job">Cancel maintenance</button>
+      {{else if .Faces}}
+      <button class="button-secondary" hx-post="/admin/users/{{.ID}}/maintenance" hx-swap="none"
+        hx-confirm="The door opens when they scan their face and choose Maintenance. The lockers stay locked."
+        data-confirm-title="Send {{.Name}} for maintenance?" data-confirm-label="Assign">Assign maintenance</button>
+      {{end}}
+    {{end}}
     <button class="button-secondary rename-open" type="button" onclick="toggleRename({{.ID}}, true)">Rename</button>
     {{if ne .Role "admin"}}
-    <button class="button-danger" hx-post="/admin/users/{{.ID}}/remove" hx-swap="none" hx-confirm="Remove {{.Name}}? They will no longer be able to use the armory.">Remove</button>
+    <button class="button-danger" hx-post="/admin/users/{{.ID}}/remove" hx-swap="none"
+      hx-confirm="They will no longer be able to use the armory."
+      data-confirm-title="Remove {{.Name}}?" data-confirm-label="Remove">Remove</button>
     {{end}}
   </div>
   <p id="person-error-{{.ID}}" class="form-error person-error" role="alert"></p>

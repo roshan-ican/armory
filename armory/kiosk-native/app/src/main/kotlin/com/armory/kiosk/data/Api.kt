@@ -60,10 +60,53 @@ class Api(private val baseUrl: String) {
         throw ApiException(res.code, message)
     }
 
+    fun identify(embedding: FloatArray): String? {
+        val out = JSONObject(call("POST", "/face/identify", JSONObject().put("descriptor", embedding.toJson())))
+        return if (out.optBoolean("matched")) out.getString("name") else null
+    }
+
     fun match(embedding: FloatArray): Person? {
         val out = JSONObject(call("POST", "/face/match", JSONObject().put("descriptor", embedding.toJson())))
         if (!out.optBoolean("matched")) return null
-        return Person(out.getString("name"), out.optString("greeting"))
+        return Person(
+            out.getString("name"), out.optString("greeting"), out.optBoolean("maintenance"), out.optString("say"),
+            out.optString("maintenance_status"),
+        )
+    }
+
+    fun finishMaintenance() {
+        call("POST", "/api/maintenance/finish")
+    }
+
+    fun beginMaintenance(): String = JSONObject(call("POST", "/api/maintenance/begin")).optString("say")
+
+    fun maintenance(): MaintState {
+        val out = JSONObject(call("GET", "/api/maintenance"))
+        val job = out.optJSONObject("job")?.let { j -> MaintJob(j.getLong("id"), j.getString("status")) }
+        val lockers = out.optJSONArray("lockers") ?: JSONArray()
+        return MaintState(
+            job,
+            List(lockers.length()) {
+                val l = lockers.getJSONObject(it)
+                val slots = l.optJSONArray("slots") ?: JSONArray()
+                MaintLocker(
+                    l.getLong("id"), l.getString("name"), l.optString("kind"), l.optInt("capacity"),
+                    List(slots.length()) { i -> slots.getJSONObject(i).let { s -> SlotReading(s.getInt("no"), s.optInt("reading", -1)) } },
+                )
+            },
+        )
+    }
+
+    fun requestMaintenance() {
+        call("POST", "/api/maintenance/request")
+    }
+
+    fun unlockLocker(lockerId: Long) {
+        call("POST", "/api/maintenance/unlock", JSONObject().put("locker_id", lockerId))
+    }
+
+    fun setCapacity(lockerId: Long, capacity: Int) {
+        call("POST", "/api/maintenance/capacity", JSONObject().put("locker_id", lockerId).put("capacity", capacity))
     }
 
     fun me(): Person = Person(JSONObject(call("GET", "/api/me")).getString("name"))
@@ -92,6 +135,12 @@ class Api(private val baseUrl: String) {
     }
 
     fun request(id: Long): GunRequest = requestOf(JSONObject(call("GET", "/api/requests/$id")))
+
+    fun closeRequest(id: Long): CloseResult {
+        val out = JSONObject(call("POST", "/api/requests/$id/close"))
+        val problems = out.optJSONArray("problems") ?: JSONArray()
+        return CloseResult(out.optBoolean("ok"), List(problems.length()) { problems.getString(it) })
+    }
 
     fun cancel(id: Long) {
         runCatching { call("POST", "/api/requests/$id/cancel") }
@@ -130,7 +179,7 @@ class Api(private val baseUrl: String) {
             available = o.optInt("available"),
             slots = List(slots.length()) {
                 val s = slots.getJSONObject(it)
-                Slot(s.getInt("no"), s.optInt("reading", -1), s.optString("taken_by"), s.optBoolean("available"))
+                Slot(s.getInt("no"), s.optInt("reading", -1), s.optString("taken_by"), s.optBoolean("available"), s.optString("requested_by"))
             },
         )
     }
@@ -148,6 +197,8 @@ class Api(private val baseUrl: String) {
             chosen = List(chosen.length()) { chosen.getJSONObject(it).let { c -> Chosen(c.getInt("no"), c.optString("status")) } },
             slots = List(slots.length()) { slots.getJSONObject(it).let { s -> SlotReading(s.getInt("no"), s.optInt("reading", -1)) } },
             wrong = List(wrong.length()) { wrong.getInt(it) },
+            closeNote = o.optString("close_note"),
+            closed = o.optBoolean("closed"),
         )
     }
 }

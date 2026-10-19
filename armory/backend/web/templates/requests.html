@@ -1,7 +1,7 @@
 {{define "content"}}
 <div
   id="requests-live"
-  hx-get="/admin/requests"
+  hx-get="/admin/requests?page={{.History.Page}}"
   hx-trigger="armory:changed from:body"
   hx-select="#requests-live"
   hx-swap="outerHTML"
@@ -13,6 +13,35 @@
     </div>
     <span class="record-count">{{len .Pending}} waiting</span>
   </div>
+
+  {{if .Maintenance}}
+  <section aria-labelledby="maintenance-title">
+    <h2 id="maintenance-title" class="section-title">Maintenance requests</h2>
+    <div class="request-list">
+      {{range .Maintenance}}
+      <article class="request-card" id="maintenance-{{.ID}}">
+        <span class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8 6.2 21l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+        </span>
+        <div class="request-body">
+          <strong>{{.UserName}}</strong>
+          {{if .Changes}}
+          <ul class="plan-list">
+            {{range .Changes}}<li>{{.Text}}</li>{{end}}
+          </ul>
+          {{else}}
+          <span class="request-line">Wants to do maintenance work</span>
+          {{end}}
+        </div>
+        <div class="request-actions">
+          <button type="button" class="button-quiet" hx-post="/admin/maintenance/{{.ID}}/cancel" hx-swap="none" hx-select="unset">Decline</button>
+          <button type="button" class="button-primary" hx-post="/admin/maintenance/{{.ID}}/approve" hx-swap="none" hx-select="unset">Approve</button>
+        </div>
+      </article>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
 
   <section aria-labelledby="waiting-title">
     <h2 id="waiting-title" class="section-title">Waiting</h2>
@@ -55,6 +84,50 @@
     </div>
   </section>
 
+  {{if .Awaiting}}
+  <section aria-labelledby="awaiting-title">
+    <h2 id="awaiting-title" class="section-title">Awaiting close</h2>
+    <div class="request-list">
+      {{range .Awaiting}}
+      <article class="request-card" id="awaiting-{{.ID}}">
+        <span class="avatar" aria-hidden="true">{{.Initials}}</span>
+        <div class="request-body">
+          <strong>{{.UserName}}</strong>
+          <span class="request-line">{{if .LockerName}}{{.LockerName}}, {{end}}{{if gt (len .Slots) 1}}guns{{else}}gun{{end}} {{.SlotList}} returned</span>
+          {{if .CloseNote}}<span class="request-reason">{{.CloseNote}}</span>{{end}}
+        </div>
+        <div class="request-actions">
+          {{if .CloseNote}}
+          <button
+            type="button"
+            class="button-quiet"
+            hx-post="/admin/requests/{{.ID}}/close"
+            hx-vals='{"force": "1"}'
+            hx-target="#request-error-{{.ID}}"
+            hx-swap="innerHTML"
+            hx-select="unset"
+          >
+            Close anyway
+          </button>
+          {{end}}
+          <button
+            type="button"
+            class="button-primary"
+            hx-post="/admin/requests/{{.ID}}/close"
+            hx-target="#request-error-{{.ID}}"
+            hx-swap="innerHTML"
+            hx-select="unset"
+          >
+            Verify &amp; close
+          </button>
+        </div>
+        <p id="request-error-{{.ID}}" class="form-error request-error" role="alert"></p>
+      </article>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
   <section aria-labelledby="earlier-title">
     <h2 id="earlier-title" class="section-title">Earlier</h2>
     <div class="panel table-panel">
@@ -69,7 +142,7 @@
             </tr>
           </thead>
           <tbody>
-            {{range .History}}
+            {{range .History.Requests}}
             <tr>
               <td>{{.UserName}}</td>
               <td>{{if eq .Kind "pistol"}}Pistol{{else}}Rifle{{end}}{{if .LockerName}} <small class="muted">· {{.LockerName}}{{if .Slots}}, {{if gt (len .Slots) 1}}guns{{else}}gun{{end}} {{.SlotList}}{{end}}</small>{{end}}</td>
@@ -77,7 +150,7 @@
               <td>
                 {{if eq .Status "approved"}}<span class="status status-in"><i></i>Approved</span>
                 {{else if eq .Status "collected"}}<span class="status status-detecting"><i></i>Taken</span>
-                {{else if eq .Status "returned"}}<span class="status status-returned"><i></i>Returned</span>
+                {{else if eq .Status "returned"}}{{if .ClosedAt}}<span class="status status-returned"><i></i>Returned</span>{{else}}<span class="status status-detecting"><i></i>Awaiting close</span>{{end}}
                 {{else if eq .Status "rejected"}}<span class="status status-taken"><i></i>Declined</span>
                 {{else if eq .Status "cancelled"}}<span class="status status-out"><i></i>Cancelled</span>
                 {{else}}<span class="status status-out"><i></i>{{.Status}}</span>{{end}}
@@ -92,6 +165,16 @@
         </table>
       </div>
     </div>
+    {{if .History.Total}}
+    <nav class="pager" aria-label="Request pages">
+      <span class="pager-count">Showing {{.History.First}}–{{.History.Last}} of {{.History.Total}}</span>
+      <div class="pager-buttons">
+        {{if .History.HasPrev}}<a class="button-secondary" href="/admin/requests?page={{.History.Prev}}">‹ Newer</a>{{else}}<span class="button-secondary pager-off" aria-disabled="true">‹ Newer</span>{{end}}
+        <span class="pager-page">Page {{.History.Page}} of {{.History.Pages}}</span>
+        {{if .History.HasNext}}<a class="button-secondary" href="/admin/requests?page={{.History.Next}}">Older ›</a>{{else}}<span class="button-secondary pager-off" aria-disabled="true">Older ›</span>{{end}}
+      </div>
+    </nav>
+    {{end}}
   </section>
 </div>
 {{end}}

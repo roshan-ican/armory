@@ -58,14 +58,17 @@ func (s *Store) ListLockers(ctx context.Context) ([]models.Locker, error) {
 
 func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT s.id, s.locker_id, s.slot_no, s.sensor_id, s.active,
-			CASE WHEN s.sensor_pos IS NULL THEN 2 ELSE COALESCE(s.reading, -1) END,
+		`SELECT s.id, s.locker_id, s.slot_no, s.sensor_id, s.active, s.sensor_disabled,
+			CASE WHEN s.sensor_pos IS NULL OR s.sensor_disabled = 1 THEN 2 ELSE COALESCE(s.reading, -1) END,
 			COALESCE((SELECT u.name FROM request_slots rs
 				JOIN requests r ON r.id = rs.request_id
 				JOIN users u ON u.id = r.requester_id
-				WHERE rs.slot_id = s.id AND r.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collected')
-					AND (rs.status = 'collected' OR EXISTS (
-						SELECT 1 FROM request_slots x WHERE x.request_id = r.id AND x.status <> 'chosen'))
+				WHERE rs.slot_id = s.id AND s.reading = 0 AND r.status IN ('approved', 'collected') AND rs.status = 'collected'
+				ORDER BY r.id DESC LIMIT 1), ''),
+			COALESCE((SELECT u.name FROM request_slots rs
+				JOIN requests r ON r.id = rs.request_id
+				JOIN users u ON u.id = r.requester_id
+				WHERE rs.slot_id = s.id AND r.status = 'approved' AND rs.status = 'chosen'
 				ORDER BY r.id DESC LIMIT 1), '')
 		 FROM slots s WHERE s.active = 1 ORDER BY s.locker_id, s.slot_no`)
 	if err != nil {
@@ -76,7 +79,7 @@ func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) 
 	slots := make(map[int64][]models.Slot)
 	for rows.Next() {
 		var sl models.Slot
-		if err := rows.Scan(&sl.ID, &sl.LockerID, &sl.SlotNo, &sl.SensorID, &sl.Active, &sl.Reading, &sl.TakenBy); err != nil {
+		if err := rows.Scan(&sl.ID, &sl.LockerID, &sl.SlotNo, &sl.SensorID, &sl.Active, &sl.SensorDisabled, &sl.Reading, &sl.TakenBy, &sl.RequestedBy); err != nil {
 			return nil, err
 		}
 		slots[sl.LockerID] = append(slots[sl.LockerID], sl)
@@ -239,6 +242,52 @@ func (s *Store) SetSensorLayout(ctx context.Context, id, start int64, reverse bo
 	return tx.Commit()
 }
 
+func (s *Store) SetSensorDisabled(ctx context.Context, lockerID, slotNo int64, disabled bool) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var slotID int64
+	err = tx.QueryRowContext(ctx,
+		"SELECT id FROM slots WHERE locker_id = ? AND slot_no = ? AND active = 1",
+		lockerID, slotNo).Scan(&slotID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if disabled {
+		var busy int
+		err = tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM request_slots rs
+			JOIN requests r ON r.id = rs.request_id
+			WHERE rs.slot_id = ? AND r.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collected')`,
+			slotID).Scan(&busy)
+		if err != nil {
+			return err
+		}
+		if busy > 0 {
+			return ErrInUse
+		}
+	}
+
+	reading := any(nil)
+	if disabled {
+		reading = 2
+	}
+	_, err = tx.ExecContext(ctx,
+		"UPDATE slots SET sensor_disabled = ?, reading = ?, updated_at = ? WHERE id = ?",
+		disabled, reading, now(), slotID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) SwapSensors(ctx context.Context, lockerID, slotA, slotB int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -247,15 +296,16 @@ func (s *Store) SwapSensors(ctx context.Context, lockerID, slotA, slotB int64) e
 	defer tx.Rollback()
 
 	type state struct {
-		id      int64
-		pos     sql.NullInt64
-		reading sql.NullInt64
+		id       int64
+		pos      sql.NullInt64
+		reading  sql.NullInt64
+		disabled bool
 	}
 	load := func(slotNo int64) (state, error) {
 		var st state
 		err := tx.QueryRowContext(ctx,
-			"SELECT id, sensor_pos, reading FROM slots WHERE locker_id = ? AND slot_no = ? AND active = 1",
-			lockerID, slotNo).Scan(&st.id, &st.pos, &st.reading)
+			"SELECT id, sensor_pos, reading, sensor_disabled FROM slots WHERE locker_id = ? AND slot_no = ? AND active = 1",
+			lockerID, slotNo).Scan(&st.id, &st.pos, &st.reading, &st.disabled)
 		if errors.Is(err, sql.ErrNoRows) {
 			return st, ErrNotFound
 		}
@@ -288,8 +338,8 @@ func (s *Store) SwapSensors(ctx context.Context, lockerID, slotA, slotB int64) e
 		id   int64
 		from state
 	}{{a.id, b}, {b.id, a}} {
-		_, err := tx.ExecContext(ctx, "UPDATE slots SET sensor_pos = ?, reading = ?, updated_at = ? WHERE id = ?",
-			u.from.pos, u.from.reading, ts, u.id)
+		_, err := tx.ExecContext(ctx, "UPDATE slots SET sensor_pos = ?, reading = ?, sensor_disabled = ?, updated_at = ? WHERE id = ?",
+			u.from.pos, u.from.reading, u.from.disabled, ts, u.id)
 		if err != nil {
 			return err
 		}

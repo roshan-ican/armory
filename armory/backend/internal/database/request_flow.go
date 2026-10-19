@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Store) LatestOpenRequest(ctx context.Context, userID int64) (models.Request, error) {
-	return s.oneRequest(ctx, " WHERE r.requester_id = ? AND r.status IN ('pending', 'approved', 'collected') ORDER BY r.id DESC LIMIT 1", userID)
+	return s.oneRequest(ctx, " WHERE r.requester_id = ? AND (r.status IN ('pending', 'approved', 'collected') OR (r.status = 'returned' AND r.closed_at IS NULL)) ORDER BY r.id DESC LIMIT 1", userID)
 }
 
 func (s *Store) MarkCollected(ctx context.Context, slotID int64) (int64, bool, error) {
@@ -62,6 +62,41 @@ func (s *Store) moveSlot(ctx context.Context, slotID int64, from, to, stamp stri
 	return requestID, left == 0, tx.Commit()
 }
 
+func (s *Store) CloseRequest(ctx context.Context, id int64, note string) error {
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE requests SET closed_at = ?, close_note = ? WHERE id = ? AND status = 'returned' AND closed_at IS NULL",
+		now(), nullIfEmpty(note), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrConflict
+	}
+	return nil
+}
+
+func (s *Store) FlagRequest(ctx context.Context, id int64, note string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "UPDATE requests SET close_note = ? WHERE id = ?", note, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO events (occurred_at, type, request_id, details) VALUES (?, 'close_problem', ?, ?)",
+		now(), id, note); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 type SlotInfo struct {
 	LockerID int64
 	SlotNo   int64
@@ -78,7 +113,7 @@ func (s *Store) GetSlotInfo(ctx context.Context, slotID int64) (SlotInfo, error)
 }
 
 func (s *Store) ApprovedRequestInLocker(ctx context.Context, lockerID int64) (models.Request, error) {
-	return s.oneRequest(ctx, " WHERE r.status = 'approved' AND r.requested_locker_id = ? ORDER BY r.id LIMIT 1", lockerID)
+	return s.oneRequest(ctx, " WHERE r.status IN ('approved', 'collected') AND r.requested_locker_id = ? ORDER BY r.id LIMIT 1", lockerID)
 }
 
 func (s *Store) RecordWrongGun(ctx context.Context, slotID, requestID int64) error {
@@ -170,4 +205,28 @@ func (s *Store) LockerIPOfSlot(ctx context.Context, slotID int64) (string, error
 		return "", ErrNotFound
 	}
 	return ip, err
+}
+
+func (s *Store) UnclosedReturnedRequestInLocker(ctx context.Context, lockerID int64) (models.Request, error) {
+	return s.oneRequest(ctx, " WHERE r.status = 'returned' AND r.closed_at IS NULL AND r.requested_locker_id = ? ORDER BY r.id DESC LIMIT 1", lockerID)
+}
+
+func (s *Store) RecordUnauthorizedTake(ctx context.Context, slotID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		"INSERT INTO events (occurred_at, type, slot_id, details) VALUES (?, 'unauthorized_take', ?, ?)",
+		now(), slotID, "took a gun with no approved request")
+	return err
+}
+
+func (s *Store) HasUnauthorizedEmpty(ctx context.Context, lockerID int64) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `
+	SELECT COUNT(*) FROM slots s
+	WHERE s.locker_id = ? AND s.active = 1 AND s.reading = 0
+	  AND EXISTS (
+	    SELECT 1 FROM events e
+	    WHERE e.slot_id = s.id AND e.type = 'unauthorized_take'
+	      AND e.id > COALESCE((SELECT MAX(r.id) FROM events r WHERE r.slot_id = s.id AND r.type = 'gun_returned'), 0))`,
+		lockerID).Scan(&n)
+	return n > 0, err
 }

@@ -22,8 +22,8 @@ class Speaker(context: Context) {
         }
     }
 
-    fun say(text: String) {
-        if (ready) tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "armory")
+    fun say(text: String, queue: Boolean = false) {
+        if (ready) tts?.speak(text, if (queue) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH, null, "armory")
     }
 
     fun shutdown() {

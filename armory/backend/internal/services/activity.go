@@ -42,9 +42,17 @@ var activityTypes = []ActivityType{
 	{"gun_removed", "Taken"},
 	{"gun_returned", "Returned"},
 	{"wrong_gun", "Wrong gun"},
+	{"unauthorized_take", "Taken without a request"},
 	{"request_expired", "Not collected"},
 	{"sensor_fault", "Sensor not detecting"},
 	{"sensor_recovered", "Sensor detecting again"},
+	{"maintenance_requested", "Maintenance requested"},
+	{"maintenance_approved", "Maintenance approved"},
+	{"maintenance_assigned", "Maintenance assigned"},
+	{"maintenance_flagged", "Maintenance not as requested"},
+	{"maintenance_started", "Maintenance started"},
+	{"maintenance_finished", "Maintenance finished"},
+	{"maintenance_cancelled", "Maintenance cancelled"},
 }
 
 type ActivityService struct {

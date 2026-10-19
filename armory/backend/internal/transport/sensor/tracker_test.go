@@ -106,6 +106,60 @@ func TestTrackerTwoSlotsChangeTogether(t *testing.T) {
 	}
 }
 
+func TestTrackerAllGunsGoneTogetherIsAFault(t *testing.T) {
+	tr := NewTracker()
+	tr.Update(board, []byte{1, 1, 1})
+	if got := feed(tr, []byte{0, 0, 0}, stableCount); len(got) != 0 {
+		t.Fatalf("all slots emptied in one packet, got %v, want no changes", got)
+	}
+}
+
+func TestTrackerFaultStaysQuietWhileItLasts(t *testing.T) {
+	tr := NewTracker()
+	tr.Update(board, []byte{1, 1, 1})
+	if got := feed(tr, []byte{0, 0, 0}, stableCount*10); len(got) != 0 {
+		t.Fatalf("fault kept reporting: %v", got)
+	}
+}
+
+func TestTrackerFaultEndingReportsNothing(t *testing.T) {
+	tr := NewTracker()
+	tr.Update(board, []byte{1, 1, 1})
+	feed(tr, []byte{0, 0, 0}, stableCount*3)
+	if got := feed(tr, []byte{1, 1, 1}, stableCount*3); len(got) != 0 {
+		t.Fatalf("recovery was reported as a change: %v", got)
+	}
+}
+
+func TestTrackerRealPickWorksAfterFault(t *testing.T) {
+	tr := NewTracker()
+	tr.Update(board, []byte{1, 1, 1})
+	feed(tr, []byte{0, 0, 0}, stableCount*3)
+	feed(tr, []byte{1, 1, 1}, stableCount*3)
+
+	got := feed(tr, []byte{1, 0, 1}, stableCount)
+	want := Change{Slot: 1, From: 1, To: 0}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %+v, want [%+v]", got, want)
+	}
+}
+
+func TestTrackerAllOccupiedSlotsGoneIsAFault(t *testing.T) {
+	tr := NewTracker()
+	tr.Update(board, []byte{1, 1, 2})
+	if got := feed(tr, []byte{0, 0, 2}, stableCount); len(got) != 0 {
+		t.Fatalf("every occupied slot emptied together, got %v, want no changes", got)
+	}
+}
+
+func TestTrackerTwoOfThreeGunsGoneIsStillReported(t *testing.T) {
+	tr := NewTracker()
+	tr.Update(board, []byte{1, 1, 1})
+	if got := feed(tr, []byte{0, 0, 1}, stableCount); len(got) != 2 {
+		t.Fatalf("got %d changes, want 2: %v", len(got), got)
+	}
+}
+
 func TestTrackerBoardsAreSeparate(t *testing.T) {
 	tr := NewTracker()
 	tr.Update(board, []byte{1, 1, 1})

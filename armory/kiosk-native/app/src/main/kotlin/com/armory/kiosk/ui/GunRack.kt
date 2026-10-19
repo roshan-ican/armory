@@ -103,7 +103,12 @@ private fun RackCell(locker: Locker, slot: Slot, picked: Boolean, iconHeight: In
         )
         if (slot.takenBy.isNotEmpty()) {
             Text(
-                slot.takenBy, color = Color(0xFFFF918A), fontSize = 10.sp, maxLines = 1,
+                "Taken by ${slot.takenBy}", color = Color(0xFFFF918A), fontSize = 10.sp, maxLines = 2,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+            )
+        } else if (slot.requestedBy.isNotEmpty()) {
+            Text(
+                "Requested by ${slot.requestedBy}", color = Color(0xFF30D158), fontSize = 10.sp, maxLines = 2,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
         }

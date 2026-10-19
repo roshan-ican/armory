@@ -9,6 +9,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,15 +54,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armory.kiosk.R
 import com.armory.kiosk.data.GunRequest
 import com.armory.kiosk.data.Locker
+import com.armory.kiosk.data.MaintLocker
 import com.armory.kiosk.data.Slot
+import com.armory.kiosk.face.ChallengeKind
 import com.armory.kiosk.face.ScanState
 import java.util.Calendar
 
 private val titles = mapOf(
-    Step.FACE to "Face verification", Step.WELCOME to "Welcome", Step.CATALOG to "Choose a locker",
+    Step.FACE to "Face verification", Step.WELCOME to "Welcome", Step.MAINTENANCE to "Maintenance",
+    Step.MAINT_HOME to "Maintenance", Step.CATALOG to "Choose a locker",
     Step.GUNS to "Choose guns", Step.REVIEW to "Review", Step.WAITING to "Approval",
     Step.OPEN to "Locker access", Step.WRONG to "Wrong slot", Step.COLLECTED to "Collected",
-    Step.DECLINED to "Declined", Step.RETURNED to "Complete", Step.ENROLL_NAME to "Your details",
+    Step.DECLINED to "Declined", Step.RETURNED to "Confirm", Step.CLOSED to "Complete", Step.ENROLL_NAME to "Your details",
     Step.ENROLL_FACE to "Face capture", Step.ENROLL_PENDING to "Request sent",
 )
 
@@ -83,6 +88,8 @@ fun KioskApp(model: KioskViewModel, cameraGranted: Boolean) {
                     when (step) {
                         Step.FACE -> FaceStep(model, state, cameraGranted)
                         Step.WELCOME -> WelcomeStep(model, state)
+                        Step.MAINT_HOME -> MaintHomeStep(model, state)
+                        Step.MAINTENANCE -> MaintenanceStep(model, state)
                         Step.CATALOG -> CatalogStep(model, state)
                         Step.GUNS -> GunsStep(model, state)
                         Step.REVIEW -> ReviewStep(model, state)
@@ -90,7 +97,8 @@ fun KioskApp(model: KioskViewModel, cameraGranted: Boolean) {
                         Step.OPEN, Step.WRONG -> OpenStep(state, step == Step.WRONG)
                         Step.COLLECTED -> CollectedStep(model, state)
                         Step.DECLINED -> Simple("×", Palette.Red, "NOT APPROVED", "Request declined", "Ask an administrator if you need help.", "Start over", model::beginFace)
-                        Step.RETURNED -> Simple("✓", Palette.Green, "COMPLETE", "Returned safely", "The slot is locked again. Thank you.", "Done", model::beginFace)
+                        Step.RETURNED -> ConfirmStep(model, state)
+                        Step.CLOSED -> Simple("✓", Palette.Green, "COMPLETE", "All good", "Everything is back in place. Please close the locker door as you leave.", "Done", model::beginFace)
                         Step.ENROLL_NAME -> EnrollNameStep(model, state)
                         Step.ENROLL_FACE -> EnrollFaceStep(model, state, cameraGranted)
                         Step.ENROLL_PENDING -> Simple("✓", Palette.Green, "SUBMITTED", "Request sent", "An admin must approve your enrollment before your face can be used.", "Return to face scan", model::beginFace)
@@ -176,8 +184,7 @@ private fun scanMessage(scan: ScanState, notice: String, modelMissing: Boolean):
         ScanState.NoFace -> "Look at the camera."
         ScanState.ManyFaces -> "Only one person at a time, please."
         is ScanState.Adjust -> scan.hint
-        is ScanState.Prompt -> scan.kind.prompt
-        ScanState.Settle -> "Now look straight ahead."
+        is ScanState.Prompt -> if (scan.name.isEmpty()) scan.kind.prompt else "${scan.name.substringBefore(' ')}, ${scan.kind.prompt.replaceFirstChar { it.lowercase() }}"
         ScanState.Checking -> "Checking…"
         is ScanState.Guide -> "${scan.prompt} (${scan.done + 1} of ${scan.total})"
         is ScanState.Captured -> "Captured ${scan.done} of ${scan.total}"
@@ -210,8 +217,90 @@ private fun WelcomeStep(model: KioskViewModel, state: UiState) {
     val greeting = state.person?.greeting.orEmpty().ifEmpty { "Good $local" }
     Screen {
         Symbol("✓", Palette.Green)
-        Copy("VERIFIED", "$greeting, ${state.person?.name?.substringBefore(' ').orEmpty()}", "Your identity has been confirmed.")
-        PrimaryButton("Continue  →", enabled = !state.busy, onClick = { model.loadCatalog() })
+        Copy("VERIFIED", "$greeting, ${state.person?.name?.substringBefore(' ').orEmpty()}", "What are you here for?")
+        PrimaryButton("Take a gun  →", enabled = !state.busy, onClick = { model.loadCatalog() })
+        SecondaryButton(
+            when (state.person?.maintenanceStatus) {
+                "requested" -> "Maintenance · waiting for approval"
+                "assigned", "active" -> "Maintenance · approved"
+                else -> "Maintenance"
+            },
+        ) { if (!state.busy) model.chooseMaintenance() }
+        ErrorLine(state.error)
+    }
+}
+
+private fun readingTone(reading: Int): Color = when (reading) {
+    1 -> Palette.Green
+    0 -> Palette.Red
+    2 -> Palette.Yellow
+    else -> Palette.Grey
+}
+
+@Composable
+private fun Chip(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).background(Palette.Fill).clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    ) { Text(text, color = if (enabled) Palette.Text else Palette.Dim, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
+private fun MaintHomeStep(model: KioskViewModel, state: UiState) {
+    val job = state.maint?.job
+    Screen {
+        when (job?.status) {
+            null -> {
+                Symbol("⚙", Palette.Yellow)
+                Copy(
+                    "MAINTENANCE", "Request maintenance",
+                    "An admin approves it, then the door and the lockers open for you. While you work, nobody else can request a gun.",
+                )
+                PrimaryButton(if (state.busy) "Sending…" else "Request maintenance", enabled = !state.busy, onClick = { model.requestMaintenance() })
+            }
+            "requested" -> {
+                Box(Modifier.size(104.dp).clip(CircleShape).background(Color(0x1A0A84FF)), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Palette.Blue, strokeWidth = 4.dp, modifier = Modifier.size(58.dp))
+                }
+                Copy("REQUEST SENT", "Waiting for approval", "An admin has been notified. Keep this screen open or come back later.")
+            }
+            else -> {
+                Symbol("✓", Palette.Green)
+                Copy("APPROVED", "You are cleared", "Tap below and the door and the lockers will open for your work.")
+                PrimaryButton("Open the door", enabled = !state.busy, onClick = { model.startMaintenance() })
+            }
+        }
+        QuietButton("‹ Back") { model.back(Step.WELCOME) }
+        ErrorLine(state.error)
+    }
+}
+
+@Composable
+private fun MaintenanceStep(model: KioskViewModel, state: UiState) {
+    val lockers = state.maint?.lockers.orEmpty()
+    Screen {
+        Symbol("⚙", Palette.Yellow)
+        Copy(
+            "MAINTENANCE", "Maintenance work",
+            "The door is open and the lockers have been unlocked. Tap Unlock if a locker locks again. Do your work, update the sensor count if it changed, then tap Finished.",
+        )
+        lockers.forEach { locker ->
+            Card(Modifier.width(520.dp)) {
+                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(locker.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            locker.slots.forEach { Box(Modifier.size(14.dp).clip(CircleShape).background(readingTone(it.reading))) }
+                        }
+                    }
+                    Chip("Unlock") { model.unlockLocker(locker.id) }
+                    Chip("−", enabled = locker.capacity > 1 && !state.busy) { model.changeCapacity(locker.id, locker.capacity - 1) }
+                    Text("${locker.capacity}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Chip("+", enabled = locker.capacity < 5 && !state.busy) { model.changeCapacity(locker.id, locker.capacity + 1) }
+                }
+            }
+        }
+        PrimaryButton("Finished", enabled = !state.busy, onClick = { model.finishMaintenance() })
         ErrorLine(state.error)
     }
 }
@@ -221,6 +310,14 @@ fun toneOf(locker: Locker, slot: Slot): Color = when {
     slot.reading == 1 -> Palette.Green
     slot.reading == 0 -> Palette.Red
     else -> Palette.Grey
+}
+
+private fun slotLabel(locker: Locker, slot: Slot): String = when {
+    slot.available -> "Available"
+    slot.takenBy.isNotEmpty() -> "Taken by ${slot.takenBy}"
+    !locker.online || slot.reading == 2 -> "Sensor not there"
+    slot.reading == 0 -> "Missing"
+    else -> "No data yet"
 }
 
 @Composable
@@ -252,7 +349,9 @@ private fun CatalogStep(model: KioskViewModel, state: UiState) {
                                     GunIcon(locker.kind, toneOf(locker, slot), if (locker.kind == "pistol") 76 else 140)
                                     Text("${slot.no}", color = Palette.Muted, fontSize = 11.sp)
                                     if (slot.takenBy.isNotEmpty()) {
-                                        Text(slot.takenBy, color = Color(0xFFFF918A), fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.Center)
+                                        Text("Taken by ${slot.takenBy}", color = Color(0xFFFF918A), fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
+                                    } else if (slot.requestedBy.isNotEmpty()) {
+                                        Text("Requested by ${slot.requestedBy}", color = Palette.Green, fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
                                     }
                                 }
                             }
@@ -418,6 +517,7 @@ private fun OpenStep(state: UiState, wrong: Boolean) {
     val r = state.request
     val remaining = r?.chosenNos("chosen").orEmpty()
     val body = when {
+        wrong && remaining.isEmpty() -> "Do not take more than you requested. Put gun ${r?.wrong?.joinToString(", ").orEmpty()} back."
         wrong -> "Return gun ${r?.wrong?.joinToString(", ").orEmpty()}, then use the highlighted ${if (remaining.size > 1) "slots" else "slot"}."
         r?.chosenNos("collected")?.isNotEmpty() == true -> "Now take gun ${listNos(remaining)}."
         else -> {
@@ -466,6 +566,31 @@ private fun CollectedStep(model: KioskViewModel, state: UiState) {
     val body = if (nos.size > 1) "Return them to $locker, slots ${listNos(nos)}, when you are finished."
     else "Return it to $locker, slot ${r?.slotNo ?: 0}, when you are finished."
     Simple("✓", Palette.Green, "COLLECTED", if (nos.size > 1) "All guns collected" else "Correct item", body, "Done", model::beginFace)
+}
+
+@Composable
+private fun ConfirmStep(model: KioskViewModel, state: UiState) {
+    val failed = state.problems.isNotEmpty()
+    Screen {
+        if (failed) {
+            Symbol("!", Palette.Red)
+            Copy("CHECK FAILED", "Something isn't right", state.problems.joinToString("\n"))
+        } else {
+            Symbol("✓", Palette.Green)
+            Copy("ALL RETURNED", "Is your collection done?", "We will check that every gun and locker is as it should be.")
+        }
+        PrimaryButton(
+            when {
+                state.busy -> "Checking…"
+                failed -> "Check again"
+                else -> "Yes, I'm done"
+            },
+            enabled = !state.busy,
+            onClick = { model.confirmClose() },
+        )
+        QuietButton("Not yet", onClick = model::beginFace)
+        ErrorLine(state.error)
+    }
 }
 
 @Composable

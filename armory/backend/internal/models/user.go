@@ -6,6 +6,9 @@ type User struct {
 	ServiceNo string
 	Role      string
 	Faces     int64
+
+	MaintenanceID     int64
+	MaintenanceStatus string
 }
 
 type FaceEnrollmentRequest struct {

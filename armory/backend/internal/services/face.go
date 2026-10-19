@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"strings"
+	"sync"
 
 	"armory/internal/database"
 	"armory/internal/models"
@@ -23,12 +24,56 @@ const (
 	noDistance           = math.MaxFloat64
 )
 
+type cachedFace struct {
+	user models.User
+	vec  []float64
+}
+
 type FaceService struct {
 	store *database.Store
+
+	mu     sync.RWMutex
+	loaded bool
+	gen    int64
+	faces  []cachedFace
 }
 
 func NewFaceService(store *database.Store) *FaceService {
 	return &FaceService{store: store}
+}
+
+func (s *FaceService) Warm(ctx context.Context) {
+	if _, err := s.enrolled(ctx); err != nil {
+		log.Printf("face cache: %v", err)
+	}
+}
+
+func (s *FaceService) enrolled(ctx context.Context) ([]cachedFace, error) {
+	gen := s.store.FaceGeneration()
+	s.mu.RLock()
+	if s.loaded && s.gen == gen {
+		faces := s.faces
+		s.mu.RUnlock()
+		return faces, nil
+	}
+	s.mu.RUnlock()
+
+	enrollments, err := s.store.ListFaceEnrollments(ctx)
+	if err != nil {
+		return nil, err
+	}
+	faces := make([]cachedFace, 0, len(enrollments))
+	for _, e := range enrollments {
+		var vec []float64
+		if json.Unmarshal([]byte(e.FaceRef), &vec) != nil || !validDescriptor(vec) {
+			continue
+		}
+		faces = append(faces, cachedFace{user: e.User, vec: vec})
+	}
+	s.mu.Lock()
+	s.faces, s.gen, s.loaded = faces, gen, true
+	s.mu.Unlock()
+	return faces, nil
 }
 
 type MatchResult struct {
@@ -173,21 +218,20 @@ func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchRes
 	if !validDescriptor(descriptor) {
 		return MatchResult{}, ErrInvalidDescriptor
 	}
-	enrollments, err := s.store.ListFaceEnrollments(ctx)
+	faces, err := s.enrolled(ctx)
 	if err != nil {
 		return MatchResult{}, err
 	}
 
 	best := noDistance
 	var bestUser models.User
-	for _, e := range enrollments {
-		var ref []float64
-		if json.Unmarshal([]byte(e.FaceRef), &ref) != nil || len(ref) != len(descriptor) || !validDescriptor(ref) {
+	for _, f := range faces {
+		if len(f.vec) != len(descriptor) {
 			continue
 		}
-		if d := distance(descriptor, ref); d < best {
+		if d := distance(descriptor, f.vec); d < best {
 			best = d
-			bestUser = e.User
+			bestUser = f.user
 		}
 	}
 	log.Printf("face match: best %.3f limit %.2f user %q", best, thresholdFor(descriptor), bestUser.Name)

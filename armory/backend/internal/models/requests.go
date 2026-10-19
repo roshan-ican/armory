@@ -42,6 +42,8 @@ type Request struct {
 	Slots             []RequestSlot
 	ExpectedReturnAt  string
 	CreatedAt         string
+	ClosedAt          string
+	CloseNote         string
 }
 
 func (r Request) Initials() string {

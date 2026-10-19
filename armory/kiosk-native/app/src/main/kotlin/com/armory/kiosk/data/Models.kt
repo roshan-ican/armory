@@ -1,6 +1,6 @@
 package com.armory.kiosk.data
 
-data class Slot(val no: Int, val reading: Int, val takenBy: String, val available: Boolean)
+data class Slot(val no: Int, val reading: Int, val takenBy: String, val available: Boolean, val requestedBy: String = "")
 
 data class Locker(
     val id: Long,
@@ -25,11 +25,27 @@ data class GunRequest(
     val chosen: List<Chosen>,
     val slots: List<SlotReading>,
     val wrong: List<Int>,
+    val closeNote: String = "",
+    val closed: Boolean = false,
 ) {
     fun chosenNos(status: String? = null): List<Int> =
         chosen.filter { status == null || it.status == status }.map { it.no }
 }
 
-data class Person(val name: String, val greeting: String = "")
+data class CloseResult(val ok: Boolean, val problems: List<String>)
+
+data class Person(
+    val name: String,
+    val greeting: String = "",
+    val maintenance: Boolean = false,
+    val say: String = "",
+    val maintenanceStatus: String = "",
+)
+
+data class MaintLocker(val id: Long, val name: String, val kind: String, val capacity: Int, val slots: List<SlotReading>)
+
+data class MaintJob(val id: Long, val status: String)
+
+data class MaintState(val job: MaintJob?, val lockers: List<MaintLocker>)
 
 class ApiException(val status: Int, message: String) : Exception(message)

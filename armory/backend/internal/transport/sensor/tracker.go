@@ -32,6 +32,19 @@ func (t *Tracker) Update(board string, slots []byte) []Change {
 		t.last[board] = states
 		return nil
 	}
+	occupied, gone := 0, 0
+	for i, v := range slots {
+		if states[i].stable == 1 {
+			occupied++
+			if v == 0 {
+				gone++
+			}
+		}
+	}
+	if occupied >= 2 && gone == occupied {
+		return nil
+	}
+
 	var changes []Change
 	for i, v := range slots {
 		s := &states[i]

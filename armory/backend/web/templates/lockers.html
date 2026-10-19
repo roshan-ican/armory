@@ -143,12 +143,12 @@
     <div
       id="slot-{{.ID}}"
       data-slot="{{.SlotNo}}"
-      data-live="{{.Reading}}-{{$online}}-{{.TakenBy}}"
-      class="slot {{if not $online}}slot-detecting{{else if eq .Reading 1}}slot-in{{else if eq .Reading 0}}slot-out{{else if eq .Reading 2}}slot-detecting{{else}}slot-fault{{end}}"
-      data-tip="Slot {{.SlotNo}}{{if .TakenBy}} · Taken by {{.TakenBy}}{{end}} · {{if not $online}}Not detecting{{else if eq .Reading 1}}Available{{else if eq .Reading 0}}Not available{{else if eq .Reading 2}}Sensor not there{{else}}No data yet{{end}}"
+      data-live="{{.Reading}}-{{$online}}-{{.SensorDisabled}}-{{.TakenBy}}-{{.RequestedBy}}"
+      class="slot {{if .SensorDisabled}}slot-disabled{{else if not $online}}slot-detecting{{else if eq .Reading 1}}slot-in{{else if eq .Reading 0}}slot-out{{else if eq .Reading 2}}slot-detecting{{else}}slot-fault{{end}}"
+      data-tip="Slot {{.SlotNo}}{{if .TakenBy}} · Taken by {{.TakenBy}}{{else if .RequestedBy}} · Requested by {{.RequestedBy}}{{end}} · {{if .SensorDisabled}}Disabled by admin{{else if not $online}}Not detecting{{else if eq .Reading 1}}Available{{else if eq .Reading 0}}Not available{{else if eq .Reading 2}}Sensor not there{{else}}No data yet{{end}}"
     >
       <span>{{.SlotNo}}</span>
-      {{if .TakenBy}}<em>Taken by {{.TakenBy}}</em>{{end}}
+      {{if .TakenBy}}<em>Taken by {{.TakenBy}}</em>{{else if .RequestedBy}}<em class="requested">Requested by {{.RequestedBy}}</em>{{end}}
     </div>
     {{end}}
   </div>
@@ -157,8 +157,9 @@
     <span><i class="slot-in"></i>Present</span>
     <span><i class="slot-out"></i>Missing</span>
     <span><i class="slot-detecting"></i>Sensor not there</span>
-    {{$nodata := false}}{{range .Slots}}{{if lt .Reading 0}}{{$nodata = true}}{{end}}{{end}}
+    {{$nodata := false}}{{$off := false}}{{range .Slots}}{{if .SensorDisabled}}{{$off = true}}{{else if lt .Reading 0}}{{$nodata = true}}{{end}}{{end}}
     {{if $nodata}}<span><i class="slot-fault"></i>No data yet</span>{{end}}
+    {{if $off}}<span><i class="slot-disabled"></i>Disabled by admin</span>{{end}}
     {{else}}
     <span><i class="slot-detecting"></i>No sensor data is being received</span>
     {{end}}
@@ -173,6 +174,23 @@
   <div class="locker-heading">
     <h2>Edit locker</h2>
   </div>
+  <div class="slot-row slot-row-{{.Kind}} slot-edit-row">
+    {{range .Slots}}
+    <button
+      type="button"
+      class="slot {{if .SensorDisabled}}slot-disabled{{else}}slot-in{{end}}"
+      data-tip="Slot {{.SlotNo}} · {{if .SensorDisabled}}Disabled by admin, tap to enable{{else}}Sensor on, tap to disable{{end}}"
+      hx-post="/admin/lockers/{{$.ID}}/slots/{{.SlotNo}}/sensor"
+      hx-vals='{"disabled": "{{if .SensorDisabled}}0{{else}}1{{end}}"}'
+      hx-select="unset"
+      hx-target="closest section"
+      hx-swap="outerHTML"
+    >
+      <span>{{.SlotNo}}</span>
+    </button>
+    {{end}}
+  </div>
+  <p class="field-hint slot-edit-hint">Tap a gun to turn its sensor off or on. A disabled sensor is ignored, so use it when a sensor is faulty.</p>
   <form
     class="locker-edit"
     hx-post="/admin/lockers/{{.ID}}"

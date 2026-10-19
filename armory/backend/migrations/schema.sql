@@ -74,7 +74,9 @@ CREATE TABLE IF NOT EXISTS requests (
     created_at         TEXT    NOT NULL,
     decided_at         TEXT,
     collected_at       TEXT,
-    returned_at        TEXT
+    returned_at        TEXT,
+    closed_at          TEXT,
+    close_note         TEXT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS events (
@@ -85,4 +87,33 @@ CREATE TABLE IF NOT EXISTS events (
     slot_id     INTEGER REFERENCES slots (id),
     request_id  INTEGER REFERENCES requests (id),
     details     TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS maintenance_jobs (
+    id          INTEGER PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users (id),
+    status      TEXT    NOT NULL DEFAULT 'assigned' CHECK (status IN ('requested', 'assigned', 'active', 'finished', 'cancelled')),
+    assigned_by INTEGER REFERENCES users (id),
+    created_at  TEXT    NOT NULL,
+    started_at  TEXT,
+    ended_at    TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_open_maintenance_per_user
+ON maintenance_jobs (user_id) WHERE status IN ('requested', 'assigned', 'active');
+
+CREATE TABLE IF NOT EXISTS maintenance_changes (
+    id        INTEGER PRIMARY KEY,
+    job_id    INTEGER NOT NULL REFERENCES maintenance_jobs (id),
+    locker_id INTEGER NOT NULL REFERENCES lockers (id),
+    action    TEXT    NOT NULL CHECK (action IN ('remove_sensor', 'add_sensor', 'replace_sensor')),
+    slot_no   INTEGER CHECK (slot_no BETWEEN 1 AND 5)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS maintenance_snapshots (
+    job_id       INTEGER NOT NULL REFERENCES maintenance_jobs (id),
+    locker_id    INTEGER NOT NULL REFERENCES lockers (id),
+    capacity     INTEGER NOT NULL,
+    guns_present INTEGER NOT NULL,
+    PRIMARY KEY (job_id, locker_id)
 ) STRICT;

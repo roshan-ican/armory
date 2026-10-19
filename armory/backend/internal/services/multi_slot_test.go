@@ -112,8 +112,14 @@ func TestSeveralGunsInOneRequest(t *testing.T) {
 	if status, _ := f.status(t, req.ID); status != models.RequestReturned {
 		t.Fatalf("after returning both: %s", status)
 	}
+	if open, _ := f.store.HasOpenRequest(ctx, f.user.ID); !open {
+		t.Fatal("request must stay open until it is closed")
+	}
+	if err := f.store.CloseRequest(ctx, req.ID, ""); err != nil {
+		t.Fatal(err)
+	}
 	if open, _ := f.store.HasOpenRequest(ctx, f.user.ID); open {
-		t.Fatal("request still open after everything was returned")
+		t.Fatal("request still open after it was closed")
 	}
 }
 

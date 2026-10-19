@@ -605,7 +605,7 @@ func TestHasOpenRequest(t *testing.T) {
 		{models.RequestRejected, false},
 		{models.RequestCancelled, false},
 		{models.RequestExpired, false},
-		{models.RequestReturned, false},
+		{models.RequestReturned, true},
 	}
 	for _, tt := range statuses {
 		t.Run(tt.status, func(t *testing.T) {
@@ -617,6 +617,15 @@ func TestHasOpenRequest(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a returned request stops counting once closed", func(t *testing.T) {
+		if _, err := st.db.Exec("UPDATE requests SET status = 'returned', closed_at = ? WHERE id = ?", now(), id); err != nil {
+			t.Fatal(err)
+		}
+		if open(user.ID) {
+			t.Fatal("a closed request must not be open")
+		}
+	})
 
 	t.Run("someone else's open request does not count", func(t *testing.T) {
 		if _, err := st.db.Exec("UPDATE requests SET status = 'pending' WHERE id = ?", id); err != nil {

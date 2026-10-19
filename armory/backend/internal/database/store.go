@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"modernc.org/sqlite"
@@ -10,11 +11,28 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	faceGen atomic.Int64
 }
 
 func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
+}
+
+func (s *Store) FaceGeneration() int64 {
+	return s.faceGen.Load()
+}
+
+func (s *Store) faceChanged() {
+	s.faceGen.Add(1)
+}
+
+func (s *Store) commitFaces(tx *sql.Tx) error {
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.faceChanged()
+	return nil
 }
 
 func isUniqueViolation(err error) bool {
@@ -31,4 +49,11 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+func nullIfZero(n int64) any {
+	if n == 0 {
+		return nil
+	}
+	return n
 }

@@ -48,6 +48,7 @@ const eventPerson = `COALESCE(
 			AND r.decided_at IS NOT NULL AND r.decided_at <= e.occurred_at
 			AND (rs.returned_at IS NULL OR e.occurred_at <= rs.returned_at)
 		ORDER BY r.decided_at DESC LIMIT 1),
+	(SELECT u.name FROM users u WHERE u.id = e.user_id),
 	'')`
 
 const eventRows = `
@@ -94,6 +95,14 @@ func (s *Store) ListEventsPage(ctx context.Context, f EventFilter, limit, offset
 		events = append(events, e)
 	}
 	return events, rows.Err()
+}
+
+func (s *Store) DeleteEventsBefore(ctx context.Context, cutoff string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM events WHERE occurred_at < ?", cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) EventPeople(ctx context.Context) ([]string, error) {

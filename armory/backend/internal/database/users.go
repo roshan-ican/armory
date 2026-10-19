@@ -9,14 +9,16 @@ import (
 )
 
 const userSelect = `
-SELECT u.id, u.name, u.service_no, u.role, COUNT(f.id)
+SELECT u.id, u.name, u.service_no, u.role, COUNT(f.id),
+	COALESCE((SELECT m.id FROM maintenance_jobs m WHERE m.user_id = u.id AND m.status IN ('requested', 'assigned', 'active')), 0),
+	COALESCE((SELECT m.status FROM maintenance_jobs m WHERE m.user_id = u.id AND m.status IN ('requested', 'assigned', 'active')), '')
 FROM users u
 LEFT JOIN face_enrollments f ON f.user_id = u.id AND f.revoked_at IS NULL
 WHERE u.active = 1`
 
 func scanUser(row scanner) (models.User, error) {
 	var u models.User
-	err := row.Scan(&u.ID, &u.Name, &u.ServiceNo, &u.Role, &u.Faces)
+	err := row.Scan(&u.ID, &u.Name, &u.ServiceNo, &u.Role, &u.Faces, &u.MaintenanceID, &u.MaintenanceStatus)
 	return u, err
 }
 
@@ -129,7 +131,7 @@ func (s *Store) ReplaceFaceEnrollments(ctx context.Context, userID int64, refs [
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commitFaces(tx)
 }
 
 func (s *Store) ListFaceEnrollments(ctx context.Context) ([]models.FaceEnrollment, error) {
@@ -181,13 +183,17 @@ func (s *Store) DeactivateRequester(ctx context.Context, id int64) error {
 		return ErrInUse
 	}
 	ts := now()
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE maintenance_jobs SET status = 'cancelled', ended_at = ? WHERE user_id = ? AND "+liveMaintenance, ts, id); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, "UPDATE face_enrollments SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", ts, id); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE users SET active = 0, updated_at = ? WHERE id = ?", ts, id); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitFaces(tx)
 }
 
 func (s *Store) Rename(ctx context.Context, id int64, name string) error {
@@ -202,5 +208,6 @@ func (s *Store) Rename(ctx context.Context, id int64, name string) error {
 	if changed == 0 {
 		return ErrNotFound
 	}
+	s.faceChanged()
 	return nil
 }

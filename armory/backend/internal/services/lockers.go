@@ -103,6 +103,26 @@ func (s *LockerService) SwapSensors(ctx context.Context, id, a, b int64) (models
 	return s.Get(ctx, id)
 }
 
+func (s *LockerService) SetSensorDisabled(ctx context.Context, id, slotNo int64, disabled bool) (models.Locker, error) {
+	l, err := s.Get(ctx, id)
+	if err != nil {
+		return models.Locker{}, err
+	}
+	if slotNo < 1 || slotNo > l.Capacity {
+		return models.Locker{}, ErrInvalidSlot
+	}
+	err = s.store.SetSensorDisabled(ctx, id, slotNo, disabled)
+	switch {
+	case errors.Is(err, database.ErrInUse):
+		return models.Locker{}, ErrSlotInUse
+	case errors.Is(err, database.ErrNotFound):
+		return models.Locker{}, ErrInvalidSlot
+	case err != nil:
+		return models.Locker{}, err
+	}
+	return s.Get(ctx, id)
+}
+
 func (s *LockerService) SetSensorLayout(ctx context.Context, id, start int64, reverse bool) (models.Locker, error) {
 	l, err := s.Get(ctx, id)
 	if err != nil {

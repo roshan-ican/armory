@@ -5,8 +5,7 @@ sealed interface ScanState {
     data object NoFace : ScanState
     data object ManyFaces : ScanState
     data class Adjust(val hint: String) : ScanState
-    data class Prompt(val kind: ChallengeKind) : ScanState
-    data object Settle : ScanState
+    data class Prompt(val kind: ChallengeKind, val name: String = "") : ScanState
     data object Checking : ScanState
     data class Guide(val prompt: String, val done: Int, val total: Int) : ScanState
     data class Captured(val done: Int, val total: Int) : ScanState
@@ -42,90 +41,119 @@ abstract class Scanner(private val embedder: Embedder) {
 
 class VerifyScanner(
     embedder: Embedder,
+    private val onIdentify: (FloatArray) -> Unit,
     private val onEmbedding: (FloatArray) -> Unit,
 ) : Scanner(embedder) {
+    private enum class Stage { COLLECT, IDENTIFYING, CHALLENGE, CONFIRM, DONE }
+
+    @Volatile
+    private var stage = Stage.COLLECT
     private var challenge: Challenge? = null
+    private var identity: FloatArray? = null
+    private var who = ""
     private var passedAt = 0L
     private val samples = mutableListOf<FloatArray>()
     private var lastSampleAt = 0L
 
-    @Volatile
-    private var waiting = false
-
     fun restart() {
+        stage = Stage.COLLECT
         challenge = null
+        identity = null
+        who = ""
         passedAt = 0
         samples.clear()
         lastSampleAt = 0
-        waiting = false
         publish(ScanState.NoFace)
     }
 
+    fun identified(name: String) {
+        who = name
+        challenge = null
+        stage = Stage.CHALLENGE
+    }
+
     override fun handle(obs: Observation) {
-        if (waiting) return
+        if (stage == Stage.IDENTIFYING || stage == Stage.DONE) return
         if (obs.faces.isEmpty()) {
-            challenge = null
-            passedAt = 0
-            publish(ScanState.NoFace)
+            restart()
             return
         }
         val face = obs.face
         if (face == null) {
-            challenge = null
-            passedAt = 0
+            restart()
             publish(ScanState.ManyFaces)
             return
         }
         val signal = Crop.signalOf(face, obs.bitmap.width)
+        when (stage) {
+            Stage.COLLECT -> collect(obs, signal)
+            Stage.CHALLENGE -> runChallenge(signal)
+            Stage.CONFIRM -> confirm(obs, signal)
+            else -> Unit
+        }
+    }
 
-        if (passedAt != 0L) {
-            if (signal.usable && (signal.smile == null || signal.neutral)) {
-                val now = System.currentTimeMillis()
-                if (now - lastSampleAt < SAMPLE_GAP_MS) return
-                lastSampleAt = now
-                publish(ScanState.Checking)
-                val vec = embed(obs)
-                if (samples.isNotEmpty() && gap(samples.first(), vec) > SAME_PERSON_MAX) {
-                    restart()
-                    return
-                }
-                samples += vec
-                if (samples.size >= SAMPLES) {
-                    waiting = true
-                    onEmbedding(average(samples))
-                }
-            } else if (System.currentTimeMillis() - passedAt > SETTLE_MS) {
-                restart()
-            } else {
-                publish(ScanState.Settle)
-            }
+    private fun collect(obs: Observation, signal: FaceSignal) {
+        val problem = hint(signal) ?: if (signal.smile != null && !signal.neutral) "Relax your face." else null
+        if (problem != null) {
+            samples.clear()
+            publish(ScanState.Adjust(problem))
             return
         }
-
-        if (challenge == null) {
-            val problem = hint(signal)
-            if (problem != null) {
-                publish(ScanState.Adjust(problem))
-                return
-            }
-            challenge = Challenge.random()
+        val now = System.currentTimeMillis()
+        if (now - lastSampleAt < SAMPLE_GAP_MS) return
+        lastSampleAt = now
+        publish(ScanState.Checking)
+        val vec = embed(obs)
+        if (samples.isNotEmpty() && gap(samples.first(), vec) > SAME_PERSON_MAX) {
+            restart()
+            return
         }
-        val active = challenge!!
-        publish(ScanState.Prompt(active.kind))
+        samples += vec
+        if (samples.size >= IDENT_SAMPLES) {
+            val avg = average(samples)
+            identity = avg
+            stage = Stage.IDENTIFYING
+            onIdentify(avg)
+        }
+    }
+
+    private fun runChallenge(signal: FaceSignal) {
+        var active = challenge
+        if (active == null) {
+            active = Challenge.any()
+            challenge = active
+        }
+        publish(ScanState.Prompt(active.kind, who))
         when (active.update(signal)) {
             Progress.PASSED -> {
                 passedAt = System.currentTimeMillis()
-                publish(ScanState.Settle)
+                stage = Stage.CONFIRM
+                publish(ScanState.Checking)
             }
             Progress.EXPIRED -> restart()
             Progress.PENDING -> Unit
         }
     }
 
+    private fun confirm(obs: Observation, signal: FaceSignal) {
+        if (signal.widthRatio >= FaceSignal.MIN_WIDTH && signal.frontal) {
+            val known = identity ?: return restart()
+            if (gap(known, embed(obs)) > SAME_PERSON_MAX) {
+                restart()
+                return
+            }
+            stage = Stage.DONE
+            onEmbedding(known)
+        } else if (System.currentTimeMillis() - passedAt > CONFIRM_MS) {
+            restart()
+        }
+    }
+
     companion object {
-        const val SETTLE_MS = 3000L
-        const val SAMPLES = 3
-        const val SAMPLE_GAP_MS = 120L
+        const val CONFIRM_MS = 2000L
+        const val IDENT_SAMPLES = 2
+        const val SAMPLE_GAP_MS = 100L
         const val SAME_PERSON_MAX = 0.8f
 
         fun average(vectors: List<FloatArray>): FloatArray {

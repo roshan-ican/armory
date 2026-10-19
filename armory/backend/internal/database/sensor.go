@@ -19,17 +19,24 @@ func (s *Store) MarkLockerSeen(ctx context.Context, lockerIP string) error {
 
 func (s *Store) FindSensorSlot(ctx context.Context, lockerIP string, slotNo int64) (int64, error) {
 	var slotID int64
+	var disabled bool
 	err := s.db.QueryRowContext(ctx, `
-	SELECT s.id
+	SELECT s.id, s.sensor_disabled
 	FROM slots s
 	JOIN lockers l ON l.id = s.locker_id
 	WHERE l.ip_address = ? AND s.active = 1 AND s.sensor_pos = ?
-	`, lockerIP, slotNo).Scan(&slotID)
+	`, lockerIP, slotNo).Scan(&slotID, &disabled)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	}
-	return slotID, err
+	if err != nil {
+		return 0, err
+	}
+	if disabled {
+		return slotID, ErrSensorDisabled
+	}
+	return slotID, nil
 }
 
 func (s *Store) RecordSensorEvent(ctx context.Context, slotID int64, reading byte, eventType string) error {

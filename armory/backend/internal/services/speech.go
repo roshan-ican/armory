@@ -9,13 +9,6 @@ import (
 	"armory/internal/models"
 )
 
-func firstName(full string) string {
-	if fields := strings.Fields(full); len(fields) > 0 {
-		return fields[0]
-	}
-	return "there"
-}
-
 func slotWords(numbers []int64) string {
 	parts := make([]string, len(numbers))
 	for i, n := range numbers {
@@ -40,17 +33,16 @@ func pendingSlotNumbers(slots []models.RequestSlot) []int64 {
 	return out
 }
 
-func WrongPickMessage(name string, picked int64, expected []int64) string {
-	who := firstName(name)
+func WrongPickMessage(picked int64, expected []int64) string {
 	if len(expected) == 0 {
-		return fmt.Sprintf("%s, you picked the gun from slot %d. That is incorrect. Please put it back.", who, picked)
+		return fmt.Sprintf("You picked the gun from slot %d. Please do not take more than you requested. Put it back.", picked)
 	}
 	noun := "slot"
 	if len(expected) > 1 {
 		noun = "slots"
 	}
-	return fmt.Sprintf("%s, you picked the gun from slot %d. That is incorrect. Please pick from %s %s, as you selected.",
-		who, picked, noun, slotWords(expected))
+	return fmt.Sprintf("You picked the gun from slot %d. That is incorrect. Please pick from %s %s, as you selected.",
+		picked, noun, slotWords(expected))
 }
 
 func Greeting(at time.Time) string {
@@ -63,8 +55,8 @@ func Greeting(at time.Time) string {
 	return "Good evening"
 }
 
-func ApprovedMessage(name, locker string, slots []int64, door bool, at time.Time) string {
-	text := fmt.Sprintf("%s %s. Your request is approved.", Greeting(at), firstName(name))
+func ApprovedMessage(locker string, slots []int64, door bool) string {
+	text := "Your request is approved."
 	if door {
 		text += " The door is open."
 	}
@@ -79,6 +71,42 @@ func ApprovedMessage(name, locker string, slots []int64, door bool, at time.Time
 	return text
 }
 
-func CorrectPickMessage(name string, picked int64) string {
-	return fmt.Sprintf("Thank you %s. Slot %d is correct.", firstName(name), picked)
+func ReturnedMessage() string {
+	return "Thank you. Please close the locker door as you leave."
+}
+
+func TakenAfterReturnMessage(picked int64) string {
+	return fmt.Sprintf("You picked the gun from slot %d. That is not part of your request, which is already complete. Please put it back.", picked)
+}
+
+func UnauthorizedTakeMessage(picked int64) string {
+	return fmt.Sprintf("A gun was taken from slot %d without an approved request. Please put it back.", picked)
+}
+
+func CloseProblemsMessage(problems []string) string {
+	return "Collection is not complete. " + strings.Join(problems, " ")
+}
+
+func ClosedMessage() string {
+	return "Thank you. Everything is back in place."
+}
+
+func MaintenanceStartMessage() string {
+	return "Please do the maintenance work, and close the door when you finish."
+}
+
+func MaintenanceDoneMessage() string {
+	return "Maintenance finished. Please make sure the door is closed."
+}
+
+func MaintenanceProblemsMessage(problems []string) string {
+	return "Maintenance is not finished. " + strings.Join(problems, " ")
+}
+
+func CorrectPickMessage(picked int64, last bool) string {
+	text := fmt.Sprintf("Slot %d is correct.", picked)
+	if last {
+		text += " Please close the locker and close the door as you leave."
+	}
+	return text
 }

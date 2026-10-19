@@ -18,18 +18,19 @@ type Server struct {
 	users    *services.UserService
 	face     *services.FaceService
 	requests *services.RequestService
+	maintain *services.MaintenanceService
 	sessions *services.Sessions
 	caPath   string
 	hub      *live.Hub
 	pages    map[string]*template.Template
 }
 
-func New(lockers *services.LockerService, activity *services.ActivityService, users *services.UserService, face *services.FaceService, requests *services.RequestService, sessions *services.Sessions, hub *live.Hub) (*Server, error) {
+func New(lockers *services.LockerService, activity *services.ActivityService, users *services.UserService, face *services.FaceService, requests *services.RequestService, maintain *services.MaintenanceService, sessions *services.Sessions, hub *live.Hub) (*Server, error) {
 	pages, err := loadPages("lockers", "activity", "users", "requests", "login")
 	if err != nil {
 		return nil, err
 	}
-	return &Server{lockers: lockers, activity: activity, users: users, face: face, requests: requests, sessions: sessions, hub: hub, pages: pages}, nil
+	return &Server{lockers: lockers, activity: activity, users: users, face: face, requests: requests, maintain: maintain, sessions: sessions, hub: hub, pages: pages}, nil
 }
 
 func (s *Server) ServeCA(path string) {
@@ -49,15 +50,23 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /{$}", redirectTo("/admin"))
 	mux.HandleFunc("POST /enroll", s.requestEnrollment)
 	mux.HandleFunc("POST /face/match", s.matchFace)
+	mux.HandleFunc("POST /face/identify", s.identifyFace)
 
 	mux.HandleFunc("GET /api/me", s.signedIn(s.apiMe))
 	mux.HandleFunc("GET /api/availability", s.signedIn(s.apiAvailability))
 	mux.HandleFunc("GET /api/catalog", s.signedIn(s.apiCatalog))
 	mux.HandleFunc("POST /api/logout", s.logout)
+	mux.HandleFunc("GET /api/maintenance", s.signedIn(s.apiMaintenance))
+	mux.HandleFunc("POST /api/maintenance/request", s.signedIn(s.apiRequestMaintenance))
+	mux.HandleFunc("POST /api/maintenance/begin", s.signedIn(s.apiBeginMaintenance))
+	mux.HandleFunc("POST /api/maintenance/unlock", s.signedIn(s.apiUnlockLocker))
+	mux.HandleFunc("POST /api/maintenance/capacity", s.signedIn(s.apiSetCapacity))
+	mux.HandleFunc("POST /api/maintenance/finish", s.signedIn(s.apiFinishMaintenance))
 	mux.HandleFunc("POST /api/requests", s.signedIn(s.apiCreateRequest))
 	mux.HandleFunc("GET /api/requests/current", s.signedIn(s.apiCurrentRequest))
 	mux.HandleFunc("GET /api/requests/{id}", s.signedIn(s.apiGetRequest))
 	mux.HandleFunc("POST /api/requests/{id}/cancel", s.signedIn(s.apiCancelRequest))
+	mux.HandleFunc("POST /api/requests/{id}/close", s.signedIn(s.apiCloseRequest))
 
 	mux.HandleFunc("GET /admin/login", s.loginPage)
 	mux.HandleFunc("POST /admin/login", s.loginAdmin)
@@ -71,17 +80,22 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/lockers/{id}/edit", s.adminOnly(s.editLocker))
 	mux.HandleFunc("POST /admin/lockers/{id}", s.adminOnly(s.updateLocker))
 	mux.HandleFunc("POST /admin/lockers/{id}/swap", s.adminOnly(s.swapSensors))
+	mux.HandleFunc("POST /admin/lockers/{id}/slots/{slot}/sensor", s.adminOnly(s.setSensorDisabled))
 	mux.HandleFunc("GET /admin/activity", s.adminOnly(s.listActivity))
 	mux.HandleFunc("GET /admin/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("GET /admin/users/badge", s.adminOnly(s.peopleBadge))
 	mux.HandleFunc("POST /admin/users/{id}/remove", s.adminOnly(s.removeUser))
 	mux.HandleFunc("POST /admin/users/{id}/rename", s.adminOnly(s.renameUser))
+	mux.HandleFunc("POST /admin/users/{id}/maintenance", s.adminOnly(s.assignMaintenance))
+	mux.HandleFunc("POST /admin/maintenance/{id}/approve", s.adminOnly(s.approveMaintenance))
+	mux.HandleFunc("POST /admin/maintenance/{id}/cancel", s.adminOnly(s.cancelMaintenance))
 	mux.HandleFunc("POST /admin/enrollments/{id}/approve", s.adminOnly(s.decideEnrollment(true)))
 	mux.HandleFunc("POST /admin/enrollments/{id}/reject", s.adminOnly(s.decideEnrollment(false)))
 	mux.HandleFunc("GET /admin/requests", s.adminOnly(s.requestsPage))
 	mux.HandleFunc("GET /admin/requests/badge", s.adminOnly(s.requestsBadge))
 	mux.HandleFunc("POST /admin/requests/{id}/approve", s.adminOnly(s.decideRequest(true)))
 	mux.HandleFunc("POST /admin/requests/{id}/reject", s.adminOnly(s.decideRequest(false)))
+	mux.HandleFunc("POST /admin/requests/{id}/close", s.adminOnly(s.closeRequest))
 
 	for _, old := range []string{"lockers", "requests", "activity", "users", "login"} {
 		mux.HandleFunc("GET /"+old, redirectTo("/admin/"+old))

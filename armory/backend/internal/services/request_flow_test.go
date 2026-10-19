@@ -17,6 +17,7 @@ type fakeHardware struct {
 	unlocks []string
 	signals []string
 	alarms  []string
+	doors   int
 }
 
 func (f *fakeHardware) Unlock(ctx context.Context, lockerIP string, slotNo int64) error {
@@ -24,7 +25,10 @@ func (f *fakeHardware) Unlock(ctx context.Context, lockerIP string, slotNo int64
 	return nil
 }
 
-func (f *fakeHardware) OpenDoor(ctx context.Context) error { return nil }
+func (f *fakeHardware) OpenDoor(ctx context.Context) error {
+	f.doors++
+	return nil
+}
 
 func (f *fakeHardware) Signal(ctx context.Context, lockerIP string, signal Signal) error {
 	f.signals = append(f.signals, lockerIP+":"+string(signal))
@@ -315,6 +319,52 @@ func TestSlotChangedFollowsTheGun(t *testing.T) {
 	})
 }
 
+func TestWrongGunAfterTheRightOneIsStillCaught(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := f.svc.Approve(ctx, f.admin.ID, req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := firstSlotID(approved)
+	wrongSlot := f.locker.Slots[2].ID
+
+	setReading := func(slotID int64, reading byte) {
+		if err := f.store.RecordSensorEvent(ctx, slotID, reading, "gun_removed"); err != nil {
+			t.Fatal(err)
+		}
+		f.svc.SlotChanged(ctx, slotID, reading)
+	}
+
+	setReading(target, 0)
+	r, err := f.store.GetRequest(ctx, req.ID)
+	if err != nil || r.Status != models.RequestCollected {
+		t.Fatalf("status = %q, %v, want collected", r.Status, err)
+	}
+
+	setReading(wrongSlot, 0)
+	v, err := f.svc.View(ctx, f.user.ID, req.ID)
+	if err != nil || !reflect.DeepEqual(v.Wrong, []int64{3}) {
+		t.Fatalf("wrong = %v, %v", v.Wrong, err)
+	}
+	if got := f.hw.alarms; len(got) == 0 || got[len(got)-1] != "10.0.0.5:true" {
+		t.Fatalf("alarms = %v, want the last one raised", got)
+	}
+
+	setReading(wrongSlot, 1)
+	v, err = f.svc.View(ctx, f.user.ID, req.ID)
+	if err != nil || len(v.Wrong) != 0 {
+		t.Fatalf("wrong = %v, %v", v.Wrong, err)
+	}
+	if got := f.hw.alarms; got[len(got)-1] != "10.0.0.5:false" {
+		t.Fatalf("alarms = %v, want the last one cleared", got)
+	}
+}
+
 func TestCatalogNamesWhoHoldsAGun(t *testing.T) {
 	ctx := context.Background()
 	f := newFlow(t)
@@ -390,11 +440,15 @@ func TestReopenResendsOpenWhileGunIsStillThere(t *testing.T) {
 		t.Fatalf("approval unlocks = %v", f.hw.unlocks)
 	}
 
+	doorsAfterApproval := f.hw.doors
 	if _, err := f.svc.Reopen(ctx, f.user.ID); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(f.hw.unlocks, []string{"10.0.0.5#1", "10.0.0.5#1"}) {
 		t.Fatalf("gun still there: unlocks = %v", f.hw.unlocks)
+	}
+	if f.hw.doors != doorsAfterApproval+1 {
+		t.Fatalf("late pickup must open the door: doors = %d", f.hw.doors)
 	}
 
 	if _, err := f.svc.Reopen(ctx, f.user.ID); err != nil {
@@ -533,11 +587,56 @@ func TestNewRequesterSupersedesAnUncollectedApproval(t *testing.T) {
 		if _, err := f.svc.CreateForLocker(ctx, f.other.ID, f.locker.ID, []int64{1}, ""); !errors.Is(err, ErrGunUnavailable) {
 			t.Fatalf("taken gun: err = %v, want ErrGunUnavailable", err)
 		}
-		if _, err := f.svc.CreateForLocker(ctx, f.other.ID, f.locker.ID, []int64{2}, ""); !errors.Is(err, ErrGunUnavailable) {
-			t.Fatalf("gun held by a partly collected request: err = %v, want ErrGunUnavailable", err)
-		}
 		if got := status(t, f, a.ID); got != models.RequestApproved {
 			t.Fatalf("first request = %q, want approved", got)
+		}
+	})
+
+	t.Run("a gun still in place can be requested even when the first requester took another", func(t *testing.T) {
+		f := newFlow(t)
+		a := ask(t, f, f.user.ID, 1, 2)
+		if _, err := f.svc.Approve(ctx, f.admin.ID, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		takeGun(t, f, slot1(f), 0)
+		b := ask(t, f, f.other.ID, 2)
+		if _, err := f.svc.Approve(ctx, f.admin.ID, b.ID); err != nil {
+			t.Fatal(err)
+		}
+		if got := status(t, f, a.ID); got != models.RequestCollected {
+			t.Fatalf("first request = %q, want collected: it keeps only the gun it took", got)
+		}
+		if got := status(t, f, b.ID); got != models.RequestApproved {
+			t.Fatalf("second request = %q, want approved", got)
+		}
+		kept, err := f.store.GetRequest(ctx, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(kept.Slots) != 1 || kept.Slots[0].SlotNo != 1 || kept.Slots[0].Status != models.SlotCollected {
+			t.Fatalf("first request slots = %+v, want only slot 1 collected", kept.Slots)
+		}
+		events, err := f.store.ListEvents(ctx, 20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, e := range events {
+			if e.Type == "request_expired" && e.Details == "left guns in place, replaced by Amit" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("no request_expired event for the released guns in %+v", events)
+		}
+
+		takeGun(t, f, f.locker.Slots[1].ID, 0)
+		if got := status(t, f, b.ID); got != models.RequestCollected {
+			t.Fatalf("second request = %q, want collected", got)
+		}
+		takeGun(t, f, slot1(f), 1)
+		if got := status(t, f, a.ID); got != models.RequestReturned {
+			t.Fatalf("first request = %q, want returned once its gun is back", got)
 		}
 	})
 }

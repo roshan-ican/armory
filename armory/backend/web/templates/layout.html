@@ -23,6 +23,52 @@
   </header>
   <main>{{template "content" .}}</main>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toast-text"></span><a href="/admin/requests">Review</a></div>
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+    <form method="dialog" class="confirm-card">
+      <div id="confirm-icon" class="confirm-icon" aria-hidden="true">?</div>
+      <h2 id="confirm-title">Please confirm</h2>
+      <p id="confirm-text"></p>
+      <div class="confirm-actions">
+        <button id="confirm-dismiss" class="button-secondary" type="submit" value="cancel">Cancel</button>
+        <button id="confirm-ok" class="button-primary" type="submit" value="ok">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+  <script>
+    (() => {
+      const dialog = document.getElementById("confirm-dialog");
+      const title = document.getElementById("confirm-title");
+      const text = document.getElementById("confirm-text");
+      const icon = document.getElementById("confirm-icon");
+      const ok = document.getElementById("confirm-ok");
+      const dismiss = document.getElementById("confirm-dismiss");
+      document.addEventListener("htmx:confirm", (evt) => {
+        if (!evt.detail.question) return;
+        evt.preventDefault();
+        const source = evt.detail.elt;
+        const danger = source.classList.contains("button-danger");
+        title.textContent = source.dataset.confirmTitle || "Please confirm";
+        text.textContent = evt.detail.question;
+        ok.textContent = source.dataset.confirmLabel || "Confirm";
+        ok.className = danger ? "button-danger-solid" : "button-primary";
+        dismiss.textContent = source.dataset.confirmDismiss || "Cancel";
+        icon.textContent = danger ? "!" : "?";
+        dialog.dataset.tone = danger ? "danger" : "";
+        dialog.returnValue = "";
+        dialog.addEventListener(
+          "close",
+          () => {
+            if (dialog.returnValue === "ok") evt.detail.issueRequest(true);
+          },
+          { once: true },
+        );
+        dialog.showModal();
+      });
+      dialog.addEventListener("click", (evt) => {
+        if (evt.target === dialog) dialog.close("cancel");
+      });
+    })();
+  </script>
   <script>
     (() => {
       const refresh = () => htmx.trigger(document.body, "armory:changed");

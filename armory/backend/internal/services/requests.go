@@ -6,14 +6,16 @@ import (
 	"log"
 	"slices"
 	"strings"
-	"time"
 
 	"armory/internal/database"
 	"armory/internal/live"
 	"armory/internal/models"
 )
 
-const recentRequests = 30
+const (
+	recentRequests  = 30
+	requestPageSize = 25
+)
 
 type RequestService struct {
 	store *database.Store
@@ -32,10 +34,11 @@ type RequestView struct {
 }
 
 type CatalogSlot struct {
-	No        int64  `json:"no"`
-	Reading   int64  `json:"reading"`
-	TakenBy   string `json:"taken_by"`
-	Available bool   `json:"available"`
+	No          int64  `json:"no"`
+	Reading     int64  `json:"reading"`
+	TakenBy     string `json:"taken_by"`
+	RequestedBy string `json:"requested_by"`
+	Available   bool   `json:"available"`
 }
 
 type CatalogItem struct {
@@ -75,7 +78,21 @@ func (s *RequestService) requireAdmin(ctx context.Context, userID int64) error {
 	return nil
 }
 
+func (s *RequestService) guardMaintenance(ctx context.Context) error {
+	active, err := s.store.MaintenanceActive(ctx)
+	if err != nil {
+		return err
+	}
+	if active {
+		return ErrMaintenanceActive
+	}
+	return nil
+}
+
 func (s *RequestService) Create(ctx context.Context, userID int64, kind, reason string) (models.Request, error) {
+	if err := s.guardMaintenance(ctx); err != nil {
+		return models.Request{}, err
+	}
 	if kind != "pistol" && kind != "rifle" {
 		return models.Request{}, ErrInvalidKind
 	}
@@ -103,6 +120,9 @@ func (s *RequestService) Create(ctx context.Context, userID int64, kind, reason 
 }
 
 func (s *RequestService) CreateForLocker(ctx context.Context, userID, lockerID int64, slotNos []int64, reason string) (models.Request, error) {
+	if err := s.guardMaintenance(ctx); err != nil {
+		return models.Request{}, err
+	}
 	locker, err := s.store.GetLocker(ctx, lockerID)
 	if errors.Is(err, database.ErrNotFound) {
 		return models.Request{}, ErrNoneAvailable
@@ -158,6 +178,9 @@ func cleanSlotNos(in []int64, capacity int64) ([]int64, error) {
 }
 
 func (s *RequestService) Catalog(ctx context.Context) ([]CatalogItem, error) {
+	if err := s.guardMaintenance(ctx); err != nil {
+		return nil, err
+	}
 	lockers, err := s.store.ListLockers(ctx)
 	if err != nil {
 		return nil, err
@@ -171,7 +194,7 @@ func (s *RequestService) Catalog(ctx context.Context) ([]CatalogItem, error) {
 		slots := make([]CatalogSlot, 0, len(locker.Slots))
 		for _, sl := range locker.Slots {
 			slots = append(slots, CatalogSlot{
-				No: sl.SlotNo, Reading: sl.Reading, TakenBy: sl.TakenBy,
+				No: sl.SlotNo, Reading: sl.Reading, TakenBy: sl.TakenBy, RequestedBy: sl.RequestedBy,
 				Available: locker.Online && sl.Reading == 1 && sl.TakenBy == "",
 			})
 		}
@@ -209,7 +232,7 @@ func (s *RequestService) Approve(ctx context.Context, adminID, id int64) (models
 		log.Printf("open door : %v", err)
 		doorOpened = false
 	}
-	s.hub.Say(ApprovedMessage(req.UserName, req.LockerName, nos, doorOpened, time.Now()))
+	s.hub.Say(ApprovedMessage(req.LockerName, nos, doorOpened))
 	s.hub.Publish()
 	return req, nil
 }
@@ -237,17 +260,118 @@ func (s *RequestService) Cancel(ctx context.Context, userID, id int64) error {
 	return nil
 }
 
+func (s *RequestService) Close(ctx context.Context, actorID, id int64, force bool) ([]string, error) {
+	actor, err := s.store.GetUser(ctx, actorID)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, ErrNotAdmin
+	}
+	if err != nil {
+		return nil, err
+	}
+	admin := actor.Role == "admin"
+	if force && !admin {
+		return nil, ErrNotAdmin
+	}
+
+	req, err := s.store.GetRequest(ctx, id)
+	if err != nil {
+		return nil, translateRequestError(err)
+	}
+	if !admin && req.UserID != actorID {
+		return nil, ErrRequestNotFound
+	}
+	if req.Status != models.RequestReturned || req.ClosedAt != "" {
+		return nil, ErrRequestClosed
+	}
+
+	slots, err := s.store.SlotsOfLocker(ctx, req.LockerID)
+	if err != nil {
+		return nil, err
+	}
+	wrong, err := s.store.WrongSlots(ctx, req.ID)
+	if err != nil {
+		return nil, err
+	}
+	problems := VerifyReturn(req, slots, wrong)
+
+	note := ""
+	if len(problems) > 0 {
+		note = strings.Join(problems, " ")
+		if !force {
+			if err := s.store.FlagRequest(ctx, id, note); err != nil {
+				return nil, err
+			}
+			log.Printf("request %d: close by %s refused, %d problems", id, actor.Name, len(problems))
+			s.hub.Say(CloseProblemsMessage(problems))
+			s.hub.Publish()
+			return problems, nil
+		}
+		note = "closed by " + actor.Name + " despite: " + note
+	}
+
+	if err := s.store.CloseRequest(ctx, id, note); err != nil {
+		return nil, translateRequestError(err)
+	}
+	log.Printf("request %d: closed by %s", id, actor.Name)
+	s.hub.Say(ClosedMessage())
+	s.hub.Publish()
+	return nil, nil
+}
+
 func (s *RequestService) Pending(ctx context.Context) ([]models.Request, error) {
 	return s.store.ListPendingRequests(ctx)
+}
+
+func (s *RequestService) AwaitingClose(ctx context.Context) ([]models.Request, error) {
+	return s.store.ListAwaitingClose(ctx)
 }
 
 func (s *RequestService) Recent(ctx context.Context) ([]models.Request, error) {
 	return s.store.ListRecentRequests(ctx, recentRequests)
 }
 
+type RequestHistoryPage struct {
+	Requests []models.Request
+	Page     int
+	Pages    int
+	Total    int
+	First    int
+	Last     int
+	HasPrev  bool
+	HasNext  bool
+	Prev     int
+	Next     int
+}
+
+func (s *RequestService) HistoryPage(ctx context.Context, page int) (RequestHistoryPage, error) {
+	total, err := s.store.CountRequestHistory(ctx)
+	if err != nil {
+		return RequestHistoryPage{}, err
+	}
+	pages := (total + requestPageSize - 1) / requestPageSize
+	if pages < 1 {
+		pages = 1
+	}
+	page = min(max(page, 1), pages)
+	list, err := s.store.ListRequestHistory(ctx, requestPageSize, (page-1)*requestPageSize)
+	if err != nil {
+		return RequestHistoryPage{}, err
+	}
+	p := RequestHistoryPage{
+		Requests: list, Page: page, Pages: pages, Total: total,
+		HasPrev: page > 1, HasNext: page < pages, Prev: page - 1, Next: page + 1,
+	}
+	if total > 0 {
+		p.First = (page-1)*requestPageSize + 1
+		p.Last = p.First + len(list) - 1
+	}
+	return p, nil
+}
+
 func (s *RequestService) view(ctx context.Context, req models.Request) (RequestView, error) {
 	v := RequestView{Request: req}
-	if req.Status != models.RequestApproved && req.Status != models.RequestCollected {
+	awaitingClose := req.Status == models.RequestReturned && req.ClosedAt == ""
+	if req.Status != models.RequestApproved && req.Status != models.RequestCollected && !awaitingClose {
 		return v, nil
 	}
 	slots, err := s.store.SlotsOfLocker(ctx, req.LockerID)
@@ -255,13 +379,11 @@ func (s *RequestService) view(ctx context.Context, req models.Request) (RequestV
 		return RequestView{}, err
 	}
 	v.Slots = slots
-	if req.Status == models.RequestApproved {
-		wrong, err := s.store.WrongSlots(ctx, req.ID)
-		if err != nil {
-			return RequestView{}, err
-		}
-		v.Wrong = wrong
+	wrong, err := s.store.WrongSlots(ctx, req.ID)
+	if err != nil {
+		return RequestView{}, err
 	}
+	v.Wrong = wrong
 	return v, nil
 }
 
@@ -298,6 +420,9 @@ func (s *RequestService) Reopen(ctx context.Context, userID int64) (RequestView,
 			log.Printf("request %d: gun %d still in %s, opening again", v.Request.ID, rs.SlotNo, v.Request.LockerName)
 			if err := s.hw.Unlock(ctx, v.Request.LockerIP, rs.SlotNo); err != nil {
 				log.Printf("unlock locker %s: %v", v.Request.LockerIP, err)
+			}
+			if err := s.hw.OpenDoor(ctx); err != nil {
+				log.Printf("open door: %v", err)
 			}
 			break
 		}
@@ -336,6 +461,16 @@ func (s *RequestService) refreshAlarm(ctx context.Context, slotID int64) {
 		wrong, err := s.store.WrongSlots(ctx, approved.ID)
 		on = err == nil && len(wrong) > 0
 	}
+	if !on {
+		if returned, err := s.store.UnclosedReturnedRequestInLocker(ctx, info.LockerID); err == nil {
+			wrong, err := s.store.WrongSlots(ctx, returned.ID)
+			on = err == nil && len(wrong) > 0
+		}
+	}
+	if !on {
+		unauthorized, err := s.store.HasUnauthorizedEmpty(ctx, info.LockerID)
+		on = err == nil && unauthorized
+	}
 	if err := s.hw.Alarm(ctx, ip, on); err != nil {
 		log.Printf("alarm %t to %s: %v", on, ip, err)
 	}
@@ -352,7 +487,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 		if id != 0 {
 			log.Printf("request %d: slot %d emptied, a chosen gun was taken (all taken: %t)", id, slotID, done)
 			s.signalSlot(ctx, slotID, SignalCorrect)
-			s.announceCorrect(ctx, id, slotID)
+			s.announceCorrect(ctx, slotID, done)
 			s.hub.Publish()
 			return
 		}
@@ -362,7 +497,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 		}
 		approved, err := s.store.ApprovedRequestInLocker(ctx, info.LockerID)
 		if err != nil {
-			log.Printf("locker %d slot %d: gun left with no approved request", info.LockerID, info.SlotNo)
+			s.flagLooseTake(ctx, slotID, info)
 			return
 		}
 		log.Printf("request %d: locker %d slot %d emptied but it was not chosen, wrong gun", approved.ID, info.LockerID, info.SlotNo)
@@ -370,7 +505,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 			log.Printf("record wrong gun slot %d: %v", slotID, err)
 			return
 		}
-		s.hub.Say(WrongPickMessage(approved.UserName, info.SlotNo, pendingSlotNumbers(approved.Slots)))
+		s.hub.Say(WrongPickMessage(info.SlotNo, pendingSlotNumbers(approved.Slots)))
 		s.hub.Publish()
 	case 1:
 		id, done, err := s.store.MarkReturned(ctx, slotID)
@@ -380,21 +515,43 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 		}
 		if id != 0 {
 			log.Printf("request %d: slot %d is back (all back: %t)", id, slotID, done)
+			if done {
+				s.hub.Say(ReturnedMessage())
+			}
 			s.hub.Publish()
 		}
 	}
 }
 
-func (s *RequestService) announceCorrect(ctx context.Context, requestID, slotID int64) {
-	req, err := s.store.GetRequest(ctx, requestID)
-	if err != nil {
+func (s *RequestService) flagLooseTake(ctx context.Context, slotID int64, info database.SlotInfo) {
+	if active, err := s.store.MaintenanceActive(ctx); err != nil || active {
 		return
 	}
+	if returned, err := s.store.UnclosedReturnedRequestInLocker(ctx, info.LockerID); err == nil {
+		if err := s.store.RecordWrongGun(ctx, slotID, returned.ID); err != nil {
+			log.Printf("record take after return slot %d: %v", slotID, err)
+			return
+		}
+		log.Printf("request %d: locker %d slot %d emptied after the request was returned", returned.ID, info.LockerID, info.SlotNo)
+		s.hub.Say(TakenAfterReturnMessage(info.SlotNo))
+		s.hub.Publish()
+		return
+	}
+	if err := s.store.RecordUnauthorizedTake(ctx, slotID); err != nil {
+		log.Printf("record unauthorized take slot %d: %v", slotID, err)
+		return
+	}
+	log.Printf("locker %d slot %d: gun left with no approved request", info.LockerID, info.SlotNo)
+	s.hub.Say(UnauthorizedTakeMessage(info.SlotNo))
+	s.hub.Publish()
+}
+
+func (s *RequestService) announceCorrect(ctx context.Context, slotID int64, last bool) {
 	info, err := s.store.GetSlotInfo(ctx, slotID)
 	if err != nil {
 		return
 	}
-	s.hub.Say(CorrectPickMessage(req.UserName, info.SlotNo))
+	s.hub.Say(CorrectPickMessage(info.SlotNo, last))
 }
 
 func (s *RequestService) signalSlot(ctx context.Context, slotID int64, signal Signal) {

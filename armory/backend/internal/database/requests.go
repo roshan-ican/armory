@@ -11,9 +11,7 @@ import (
 const reservedSlots = `
 SELECT rs.slot_id FROM request_slots rs
 JOIN requests rr ON rr.id = rs.request_id
-WHERE rr.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collected')
-  AND (rs.status = 'collected' OR EXISTS (
-	SELECT 1 FROM request_slots x WHERE x.request_id = rr.id AND x.status <> 'chosen'))`
+WHERE rr.status IN ('approved', 'collected') AND rs.status = 'collected'`
 
 const approvedSlots = `
 SELECT rs.slot_id FROM request_slots rs
@@ -22,21 +20,26 @@ WHERE rr.status IN ('approved', 'collected') AND rs.status IN ('chosen', 'collec
 
 func supersedeUnclaimed(ctx context.Context, tx *sql.Tx, requestID int64) error {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT r.id, MIN(theirs.slot_id)
+		SELECT r.id,
+			EXISTS (SELECT 1 FROM request_slots x WHERE x.request_id = r.id AND x.status <> 'chosen'),
+			(SELECT MIN(c.slot_id) FROM request_slots c WHERE c.request_id = r.id AND c.status = 'chosen'),
+			(SELECT COUNT(*) FROM request_slots c WHERE c.request_id = r.id AND c.status = 'chosen')
 		FROM requests r
-		JOIN request_slots theirs ON theirs.request_id = r.id
 		WHERE r.status = 'approved' AND r.id <> ?
 		  AND r.requested_locker_id = (SELECT requested_locker_id FROM requests WHERE id = ?)
-		  AND NOT EXISTS (SELECT 1 FROM request_slots x WHERE x.request_id = r.id AND x.status <> 'chosen')
-		GROUP BY r.id`, requestID, requestID)
+		  AND EXISTS (SELECT 1 FROM request_slots c WHERE c.request_id = r.id AND c.status = 'chosen')`,
+		requestID, requestID)
 	if err != nil {
 		return err
 	}
-	type stale struct{ id, slotID int64 }
+	type stale struct {
+		id, slotID, left int64
+		progressed       bool
+	}
 	var list []stale
 	for rows.Next() {
 		var st stale
-		if err := rows.Scan(&st.id, &st.slotID); err != nil {
+		if err := rows.Scan(&st.id, &st.progressed, &st.slotID, &st.left); err != nil {
 			rows.Close()
 			return err
 		}
@@ -47,15 +50,29 @@ func supersedeUnclaimed(ctx context.Context, tx *sql.Tx, requestID int64) error 
 		return err
 	}
 	for _, st := range list {
-		if _, err := tx.ExecContext(ctx,
+		details := "did not collect, replaced by "
+		if st.progressed {
+			details = "left guns in place, replaced by "
+			if _, err := tx.ExecContext(ctx,
+				"DELETE FROM request_slots WHERE request_id = ? AND status = 'chosen'", st.id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE requests SET status = CASE
+					WHEN EXISTS (SELECT 1 FROM request_slots x WHERE x.request_id = requests.id AND x.status = 'collected')
+					THEN 'collected' ELSE 'returned' END
+				WHERE id = ? AND status = 'approved'`, st.id); err != nil {
+				return err
+			}
+		} else if _, err := tx.ExecContext(ctx,
 			"UPDATE requests SET status = 'expired' WHERE id = ? AND status = 'approved'", st.id); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO events (occurred_at, type, slot_id, request_id, details)
-			SELECT ?, 'request_expired', ?, ?, 'did not collect, replaced by ' || u.name
+			SELECT ?, 'request_expired', ?, ?, ? || u.name
 			FROM requests r JOIN users u ON u.id = r.requester_id WHERE r.id = ?`,
-			now(), st.slotID, st.id, requestID); err != nil {
+			now(), st.slotID, st.id, details, requestID); err != nil {
 			return err
 		}
 	}
@@ -114,7 +131,7 @@ const requestSelect = `
 SELECT r.id, r.requester_id, u.name, u.service_no,
 	COALESCE(r.kind, ''), COALESCE(r.requested_locker_id, 0), COALESCE(r.reason, ''), r.status,
 	COALESCE(l.id, 0), COALESCE(l.name, ''), COALESCE(l.ip_address, ''),
-	COALESCE(r.expected_return_at, ''), r.created_at
+	COALESCE(r.expected_return_at, ''), r.created_at, COALESCE(r.closed_at, ''), COALESCE(r.close_note, '')
 FROM requests r
 JOIN users u ON u.id = r.requester_id
 LEFT JOIN lockers l ON l.id = r.requested_locker_id
@@ -136,6 +153,8 @@ func scanRequest(row scanner) (models.Request, error) {
 		&r.LockerIP,
 		&r.ExpectedReturnAt,
 		&r.CreatedAt,
+		&r.ClosedAt,
+		&r.CloseNote,
 	)
 	return r, err
 }
@@ -209,8 +228,22 @@ func (s *Store) ListPendingRequests(ctx context.Context) ([]models.Request, erro
 	return s.listRequests(ctx, " WHERE r.status = 'pending' ORDER BY r.id")
 }
 
+func (s *Store) ListAwaitingClose(ctx context.Context) ([]models.Request, error) {
+	return s.listRequests(ctx, " WHERE r.status = 'returned' AND r.closed_at IS NULL ORDER BY r.id")
+}
+
 func (s *Store) ListRecentRequests(ctx context.Context, limit int) ([]models.Request, error) {
-	return s.listRequests(ctx, " WHERE r.status != 'pending' ORDER BY r.id DESC LIMIT ?", limit)
+	return s.ListRequestHistory(ctx, limit, 0)
+}
+
+func (s *Store) ListRequestHistory(ctx context.Context, limit, offset int) ([]models.Request, error) {
+	return s.listRequests(ctx, " WHERE r.status != 'pending' ORDER BY r.id DESC LIMIT ? OFFSET ?", limit, offset)
+}
+
+func (s *Store) CountRequestHistory(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM requests WHERE status != 'pending'").Scan(&n)
+	return n, err
 }
 
 func (s *Store) RejectRequest(ctx context.Context, id, adminID int64, note string) error {
@@ -343,7 +376,7 @@ func (s *Store) CancelRequest(ctx context.Context, id, userID int64) error {
 func (s *Store) HasOpenRequest(ctx context.Context, userID int64) (bool, error) {
 	var open bool
 	err := s.db.QueryRowContext(ctx,
-		"SELECT EXISTS (SELECT 1 FROM requests WHERE requester_id = ? AND status IN ('pending', 'approved', 'collected'))",
+		"SELECT EXISTS (SELECT 1 FROM requests WHERE requester_id = ? AND (status IN ('pending', 'approved', 'collected') OR (status = 'returned' AND closed_at IS NULL)))",
 		userID).Scan(&open)
 	return open, err
 }

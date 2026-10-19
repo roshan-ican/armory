@@ -61,6 +61,48 @@ class LivenessTest {
     }
 
     @Test
+    fun anyPassesOnWhicheverActionComesFirst() {
+        val blink = Challenge.any()
+        blink.update(signal())
+        blink.update(signal(left = 0.1f, right = 0.1f))
+        assertEquals(Progress.PASSED, blink.update(signal()))
+
+        val smile = Challenge.any()
+        smile.update(signal(smile = 0.1f))
+        assertEquals(Progress.PASSED, smile.update(signal(smile = 0.7f)))
+
+        val turn = Challenge.any()
+        turn.update(signal(yaw = 25f))
+        assertEquals(Progress.PASSED, turn.update(signal(yaw = 3f)))
+    }
+
+    @Test
+    fun anyStaysPendingWhenNothingHappens() {
+        val c = Challenge.any()
+        repeat(50) { assertEquals(Progress.PENDING, c.update(signal())) }
+    }
+
+    @Test
+    fun anyTracksAllThreeActionsAtTheSameTime() {
+        val c = Challenge.any()
+        c.update(signal(yaw = 25f))
+        c.update(signal(left = 0.1f, right = 0.1f))
+        assertEquals(Progress.PASSED, c.update(signal(yaw = 2f)))
+    }
+
+    @Test
+    fun smileNeedsOnlyAGentleSmile() {
+        val c = Challenge(ChallengeKind.SMILE)
+        c.update(signal(smile = 0.1f))
+        assertEquals(Progress.PASSED, c.update(signal(smile = 0.65f)))
+    }
+
+    @Test
+    fun randomNeverPicksTheCombinedChallenge() {
+        repeat(200) { assertFalse(Challenge.random().kind == ChallengeKind.ANY) }
+    }
+
+    @Test
     fun expiresAfterTimeout() {
         var now = 1_000L
         val c = Challenge(ChallengeKind.BLINK, timeoutMs = 8000, clock = { now })

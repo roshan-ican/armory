@@ -109,5 +109,5 @@ func (s *Store) DecideFaceEnrollmentRequest(ctx context.Context, id, adminID int
 	if n, _ := res.RowsAffected(); n != 1 {
 		return ErrConflict
 	}
-	return tx.Commit()
+	return s.commitFaces(tx)
 }

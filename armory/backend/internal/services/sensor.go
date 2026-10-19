@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	"armory/internal/database"
 	"armory/internal/live"
@@ -31,6 +32,9 @@ func (s *SensorService) Seen(ctx context.Context, lockerIP string) error {
 
 func (s *SensorService) Record(ctx context.Context, lockerIP string, slotNo int64, reading byte, eventType string) error {
 	slotID, err := s.store.FindSensorSlot(ctx, lockerIP, slotNo)
+	if errors.Is(err, database.ErrSensorDisabled) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -46,6 +50,9 @@ func (s *SensorService) Record(ctx context.Context, lockerIP string, slotNo int6
 
 func (s *SensorService) Sync(ctx context.Context, lockerIP string, slotNo int64, reading byte, eventType string) error {
 	slotID, err := s.store.FindSensorSlot(ctx, lockerIP, slotNo)
+	if errors.Is(err, database.ErrSensorDisabled) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

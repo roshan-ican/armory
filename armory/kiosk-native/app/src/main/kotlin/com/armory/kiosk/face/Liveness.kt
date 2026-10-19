@@ -6,6 +6,7 @@ enum class ChallengeKind(val prompt: String) {
     BLINK("Blink your eyes"),
     TURN("Turn your head to either side, then look back"),
     SMILE("Give a smile"),
+    ANY("Blink, smile or turn your head"),
 }
 
 data class FaceSignal(
@@ -35,10 +36,10 @@ data class FaceSignal(
         const val OPEN = 0.6f
         const val CLOSED = 0.25f
         const val NEUTRAL = 0.35f
-        const val SMILING = 0.75f
+        const val SMILING = 0.6f
         const val FRONTAL_YAW = 12f
         const val FRONTAL_PITCH = 15f
-        const val TURNED_YAW = 22f
+        const val TURNED_YAW = 18f
         const val MIN_WIDTH = 0.28f
     }
 }
@@ -47,7 +48,7 @@ enum class Progress { PENDING, PASSED, EXPIRED }
 
 class Challenge(
     val kind: ChallengeKind,
-    private val timeoutMs: Long = 8000,
+    private val timeoutMs: Long = 6000,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val started = clock()
@@ -56,27 +57,36 @@ class Challenge(
     private var sawTurn = false
     private var sawNeutral = false
 
+    private fun blinkDone(s: FaceSignal): Boolean {
+        if (s.eyesOpen && !sawClosed) sawOpen = true
+        if (sawOpen && s.eyesClosed) sawClosed = true
+        return sawClosed && s.eyesOpen
+    }
+
+    private fun turnDone(s: FaceSignal): Boolean {
+        if (abs(s.yaw) > FaceSignal.TURNED_YAW) sawTurn = true
+        return sawTurn && s.frontal
+    }
+
+    private fun smileDone(s: FaceSignal): Boolean {
+        if (s.neutral) sawNeutral = true
+        return sawNeutral && (s.smile ?: 0f) > FaceSignal.SMILING
+    }
+
     fun update(s: FaceSignal): Progress {
         if (clock() - started > timeoutMs) return Progress.EXPIRED
         val done = when (kind) {
-            ChallengeKind.BLINK -> {
-                if (s.eyesOpen && !sawClosed) sawOpen = true
-                if (sawOpen && s.eyesClosed) sawClosed = true
-                sawClosed && s.eyesOpen
-            }
-            ChallengeKind.TURN -> {
-                if (abs(s.yaw) > FaceSignal.TURNED_YAW) sawTurn = true
-                sawTurn && s.frontal
-            }
-            ChallengeKind.SMILE -> {
-                if (s.neutral) sawNeutral = true
-                sawNeutral && (s.smile ?: 0f) > FaceSignal.SMILING
-            }
+            ChallengeKind.BLINK -> blinkDone(s)
+            ChallengeKind.TURN -> turnDone(s)
+            ChallengeKind.SMILE -> smileDone(s)
+            ChallengeKind.ANY -> listOf(blinkDone(s), turnDone(s), smileDone(s)).any { it }
         }
         return if (done) Progress.PASSED else Progress.PENDING
     }
 
     companion object {
-        fun random(): Challenge = Challenge(ChallengeKind.entries.random())
+        fun random(): Challenge = Challenge(ChallengeKind.entries.filter { it != ChallengeKind.ANY }.random())
+
+        fun any(): Challenge = Challenge(ChallengeKind.ANY)
     }
 }

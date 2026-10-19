@@ -59,6 +59,10 @@
             {{else if eq .Type "request_expired"}}<span class="status status-detecting"><i></i>Not collected</span>
             {{else if eq .Type "sensor_fault"}}<span class="status status-detecting"><i></i>Sensor not detecting</span>
             {{else if eq .Type "sensor_recovered"}}<span class="status status-out"><i></i>Sensor detecting again</span>
+            {{else if eq .Type "maintenance_assigned"}}<span class="status status-waiting"><i></i>Maintenance assigned</span>
+            {{else if eq .Type "maintenance_started"}}<span class="status status-in"><i></i>Maintenance started</span>
+            {{else if eq .Type "maintenance_finished"}}<span class="status status-returned"><i></i>Maintenance finished</span>
+            {{else if eq .Type "maintenance_cancelled"}}<span class="status status-muted"><i></i>Maintenance cancelled</span>
             {{else}}{{.Type}}{{end}}
             {{if .Details}}<small class="muted">{{.Details}}</small>{{end}}
           </td>

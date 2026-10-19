@@ -14,11 +14,13 @@ type Locker struct {
 }
 
 type Slot struct {
-	ID       int64
-	LockerID int64
-	SlotNo   int64
-	SensorID int64
-	Active   bool
-	Reading  int64
-	TakenBy  string
+	ID             int64
+	LockerID       int64
+	SlotNo         int64
+	SensorID       int64
+	Active         bool
+	SensorDisabled bool
+	Reading        int64
+	TakenBy        string
+	RequestedBy    string
 }

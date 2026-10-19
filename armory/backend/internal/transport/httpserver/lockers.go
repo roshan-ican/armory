@@ -105,6 +105,35 @@ func (s *Server) swapSensors(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "lockers", "locker_card", l)
 }
 
+func (s *Server) setSensorDisabled(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	target := "#locker-error-" + r.PathValue("id")
+	slotNo, err := strconv.ParseInt(r.PathValue("slot"), 10, 64)
+	if err != nil {
+		formErrorAt(w, services.ErrInvalidSlot, target)
+		return
+	}
+	l, err := s.lockers.SetSensorDisabled(r.Context(), id, slotNo, r.FormValue("disabled") == "1")
+	if errors.Is(err, services.ErrInvalidSlot) || errors.Is(err, services.ErrSlotInUse) {
+		formErrorAt(w, err, target)
+		return
+	}
+	if errors.Is(err, services.ErrLockerNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	s.hub.Publish()
+	s.render(w, "lockers", "locker_edit_card", l)
+}
+
 func (s *Server) updateLocker(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {

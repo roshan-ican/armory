@@ -11,38 +11,35 @@ import (
 
 func TestWrongPickMessage(t *testing.T) {
 	cases := []struct {
-		name     string
 		picked   int64
 		expected []int64
 		want     string
 	}{
-		{"Roshan Sahani", 2, []int64{1}, "Roshan, you picked the gun from slot 2. That is incorrect. Please pick from slot 1, as you selected."},
-		{"Roshan", 3, []int64{1, 2}, "Roshan, you picked the gun from slot 3. That is incorrect. Please pick from slots 1 and 2, as you selected."},
-		{"Roshan", 4, []int64{1, 2, 3}, "Roshan, you picked the gun from slot 4. That is incorrect. Please pick from slots 1, 2 and 3, as you selected."},
-		{"Roshan", 2, nil, "Roshan, you picked the gun from slot 2. That is incorrect. Please put it back."},
-		{"", 2, []int64{1}, "there, you picked the gun from slot 2. That is incorrect. Please pick from slot 1, as you selected."},
+		{2, []int64{1}, "You picked the gun from slot 2. That is incorrect. Please pick from slot 1, as you selected."},
+		{3, []int64{1, 2}, "You picked the gun from slot 3. That is incorrect. Please pick from slots 1 and 2, as you selected."},
+		{4, []int64{1, 2, 3}, "You picked the gun from slot 4. That is incorrect. Please pick from slots 1, 2 and 3, as you selected."},
+		{2, nil, "You picked the gun from slot 2. Please do not take more than you requested. Put it back."},
 	}
 	for _, c := range cases {
-		if got := WrongPickMessage(c.name, c.picked, c.expected); got != c.want {
+		if got := WrongPickMessage(c.picked, c.expected); got != c.want {
 			t.Errorf("got %q, want %q", got, c.want)
 		}
 	}
 }
 
 func TestApprovedMessage(t *testing.T) {
-	morning := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
 	cases := []struct {
 		slots []int64
 		door  bool
 		want  string
 	}{
-		{[]int64{1}, true, "Good morning Roshan. Your request is approved. The door is open. Locker 1 is open. Please take slot 1."},
-		{[]int64{1, 2}, true, "Good morning Roshan. Your request is approved. The door is open. Locker 1 is open. Please take slots 1 and 2."},
-		{[]int64{1}, false, "Good morning Roshan. Your request is approved. Locker 1 is open. Please take slot 1."},
-		{nil, true, "Good morning Roshan. Your request is approved. The door is open. Locker 1 is open."},
+		{[]int64{1}, true, "Your request is approved. The door is open. Locker 1 is open. Please take slot 1."},
+		{[]int64{1, 2}, true, "Your request is approved. The door is open. Locker 1 is open. Please take slots 1 and 2."},
+		{[]int64{1}, false, "Your request is approved. Locker 1 is open. Please take slot 1."},
+		{nil, true, "Your request is approved. The door is open. Locker 1 is open."},
 	}
 	for _, c := range cases {
-		if got := ApprovedMessage("Roshan Sahani", "Locker 1", c.slots, c.door, morning); got != c.want {
+		if got := ApprovedMessage("Locker 1", c.slots, c.door); got != c.want {
 			t.Errorf("got %q, want %q", got, c.want)
 		}
 	}
@@ -75,10 +72,9 @@ func TestApproveSpeaksThatTheLockerIsOpen(t *testing.T) {
 	}
 	select {
 	case text := <-spoken:
-		if !strings.HasPrefix(text, "Good ") || !strings.Contains(text, " Roshan. Your request is approved.") ||
-			!strings.Contains(text, "The door is open") ||
-			!strings.Contains(text, "East is open") || !strings.Contains(text, "slot 1") {
-			t.Fatalf("approval said %q", text)
+		want := "Your request is approved. The door is open. East is open. Please take slot 1."
+		if text != want {
+			t.Fatalf("approval said %q, want %q", text, want)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("approval spoke nothing")
@@ -86,7 +82,11 @@ func TestApproveSpeaksThatTheLockerIsOpen(t *testing.T) {
 }
 
 func TestCorrectPickMessage(t *testing.T) {
-	if got, want := CorrectPickMessage("Roshan Sahani", 1), "Thank you Roshan. Slot 1 is correct."; got != want {
+	if got, want := CorrectPickMessage(1, false), "Slot 1 is correct."; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	want := "Slot 1 is correct. Please close the locker and close the door as you leave."
+	if got := CorrectPickMessage(1, true); got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
@@ -103,22 +103,11 @@ func TestPendingSlotNumbersKeepsOnlyChosen(t *testing.T) {
 	}
 }
 
-func TestSlotChangedSpeaksWrongAndCorrectPicks(t *testing.T) {
+func spokenFlow(t *testing.T, f flow) (func() string, func(int64)) {
+	t.Helper()
 	ctx := context.Background()
-	f := newFlow(t)
-	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	approved, err := f.svc.Approve(ctx, f.admin.ID, req.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := firstSlotID(approved)
-	wrongSlot := f.locker.Slots[2].ID
 	spoken, cancel := f.hub.SubscribeSpeech()
-	defer cancel()
-
+	t.Cleanup(cancel)
 	next := func() string {
 		select {
 		case text := <-spoken:
@@ -134,16 +123,126 @@ func TestSlotChangedSpeaksWrongAndCorrectPicks(t *testing.T) {
 		}
 		f.svc.SlotChanged(ctx, slotID, 0)
 	}
+	return next, take
+}
 
-	take(wrongSlot)
-	wrong := next()
-	if !strings.Contains(wrong, "slot 3") || !strings.Contains(wrong, "incorrect") || !strings.Contains(wrong, "slot 1") {
-		t.Fatalf("wrong pick said %q", wrong)
+func TestSlotChangedSpeaksWrongAndCorrectPicks(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := f.svc.Approve(ctx, f.admin.ID, req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, take := spokenFlow(t, f)
+
+	take(f.locker.Slots[2].ID)
+	wantWrong := "You picked the gun from slot 3. That is incorrect. Please pick from slot 1, as you selected."
+	if got := next(); got != wantWrong {
+		t.Fatalf("wrong pick said %q, want %q", got, wantWrong)
 	}
 
-	take(target)
-	right := next()
-	if !strings.Contains(right, "Slot 1 is correct") {
-		t.Fatalf("correct pick said %q", right)
+	take(firstSlotID(approved))
+	wantRight := "Slot 1 is correct. Please close the locker and close the door as you leave."
+	if got := next(); got != wantRight {
+		t.Fatalf("correct pick said %q, want %q", got, wantRight)
+	}
+}
+
+func TestLastGunOfSeveralTellsThemToCloseUp(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.CreateForLocker(ctx, f.user.ID, f.locker.ID, []int64{1, 3}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
+		t.Fatal(err)
+	}
+	next, take := spokenFlow(t, f)
+
+	take(f.locker.Slots[0].ID)
+	if first := next(); first != "Slot 1 is correct." {
+		t.Fatalf("first gun said %q", first)
+	}
+
+	take(f.locker.Slots[2].ID)
+	want := "Slot 3 is correct. Please close the locker and close the door as you leave."
+	if last := next(); last != want {
+		t.Fatalf("last gun said %q, want %q", last, want)
+	}
+}
+
+func TestReturningTheLastGunThanksAndAsksToCloseTheDoor(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.CreateForLocker(ctx, f.user.ID, f.locker.ID, []int64{1, 3}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
+		t.Fatal(err)
+	}
+	next, take := spokenFlow(t, f)
+	take(f.locker.Slots[0].ID)
+	next()
+	take(f.locker.Slots[2].ID)
+	next()
+	time.Sleep(50 * time.Millisecond)
+
+	put := func(slotID int64) {
+		if err := f.store.RecordSensorEvent(ctx, slotID, 1, "gun_returned"); err != nil {
+			t.Fatal(err)
+		}
+		f.svc.SlotChanged(ctx, slotID, 1)
+	}
+
+	spoken, cancel := f.hub.SubscribeSpeech()
+	defer cancel()
+
+	put(f.locker.Slots[0].ID)
+	select {
+	case text := <-spoken:
+		t.Fatalf("returning the first of two guns said %q", text)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	put(f.locker.Slots[2].ID)
+	select {
+	case got := <-spoken:
+		if want := ReturnedMessage(); got != want {
+			t.Fatalf("last gun back said %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("nothing was spoken when the last gun came back")
+	}
+}
+
+func TestNoServerMessageRepeatsThePersonsName(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, take := spokenFlow(t, f)
+	approved, err := f.svc.Approve(ctx, f.admin.ID, req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lines := []string{next()}
+	take(f.locker.Slots[2].ID)
+	lines = append(lines, next())
+	take(firstSlotID(approved))
+	lines = append(lines, next())
+
+	for _, line := range lines {
+		if strings.Contains(line, "Roshan") || strings.Contains(line, "Sahani") {
+			t.Fatalf("message repeats the name: %q", line)
+		}
 	}
 }

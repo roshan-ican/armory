@@ -28,6 +28,8 @@ type app struct {
 	store    *database.Store
 	requests *services.RequestService
 	face     *services.FaceService
+	hw       *recordingHardware
+	hub      *live.Hub
 	locker   models.Locker
 	admin    models.User
 	user     models.User
@@ -55,8 +57,10 @@ func newApp(t *testing.T, enrollAdmin bool) *app {
 	lockers := services.NewLockerService(store)
 	users := services.NewUserService(store)
 	face := services.NewFaceService(store)
-	requests := services.NewRequestService(store, services.LogHardware{}, hub)
-	srv, err := httpserver.New(lockers, services.NewActivityService(store), users, face, requests, services.NewSessions(), hub)
+	hw := &recordingHardware{}
+	requests := services.NewRequestService(store, hw, hub)
+	maintain := services.NewMaintenanceService(store, hw, hub)
+	srv, err := httpserver.New(lockers, services.NewActivityService(store), users, face, requests, maintain, services.NewSessions(), hub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +94,7 @@ func newApp(t *testing.T, enrollAdmin bool) *app {
 	if err := face.Enroll(ctx, user.ID, [][]float64{faces[user.ID]}); err != nil {
 		t.Fatal(err)
 	}
-	return &app{handler: handler, ts: ts, store: store, requests: requests, face: face, locker: locker, admin: admin, user: user, faces: faces}
+	return &app{handler: handler, ts: ts, store: store, requests: requests, face: face, hw: hw, hub: hub, locker: locker, admin: admin, user: user, faces: faces}
 }
 
 type browser struct {
@@ -360,8 +364,18 @@ func TestRequestLifecycleOverHTTP(t *testing.T) {
 	if asMap(t, body)["status"] != "returned" {
 		t.Fatalf("returned view = %s", body)
 	}
+	if status, _, _ := user.do("GET", "/api/requests/current", nil, nil); status != 200 {
+		t.Fatalf("a returned request stays open until closed, got %d", status)
+	}
+	status, _, body = user.do("POST", idPath+"/close", nil, nil)
+	if status != 200 || asMap(t, body)["ok"] != true {
+		t.Fatalf("close = %d %s", status, body)
+	}
+	if status, _, _ = user.do("POST", idPath+"/close", nil, nil); status != http.StatusConflict {
+		t.Fatalf("closing twice = %d, want 409", status)
+	}
 	if status, _, _ := user.do("GET", "/api/requests/current", nil, nil); status != http.StatusNotFound {
-		t.Fatalf("a returned request is closed, got %d", status)
+		t.Fatalf("a closed request is gone, got %d", status)
 	}
 
 	status, _, body = user.do("POST", "/api/requests", map[string]any{"kind": "rifle"}, nil)
@@ -557,5 +571,52 @@ func TestAdminSetsSensorLayoutFromTheEditForm(t *testing.T) {
 	l, _ = a.store.GetLocker(context.Background(), a.locker.ID)
 	if l.SensorStart != 2 {
 		t.Fatalf("invalid value must not be saved, got %d", l.SensorStart)
+	}
+}
+
+func TestAdminClosesAReturnedRequest(t *testing.T) {
+	ctx := context.Background()
+	a := newApp(t, true)
+	admin := a.browser(t)
+	admin.adminSignIn()
+	hx := map[string]string{"HX-Request": "true"}
+
+	req, err := a.requests.CreateForLocker(ctx, a.user.ID, a.locker.ID, []int64{1}, "")
+	must(t, err)
+	if _, err := a.requests.Approve(ctx, a.admin.ID, req.ID); err != nil {
+		t.Fatal(err)
+	}
+	slot := a.locker.Slots[0].ID
+	must(t, a.store.RecordSensorEvent(ctx, slot, 0, "gun_removed"))
+	a.requests.SlotChanged(ctx, slot, 0)
+	must(t, a.store.RecordSensorEvent(ctx, slot, 1, "gun_returned"))
+	a.requests.SlotChanged(ctx, slot, 1)
+
+	path := "/admin/requests/" + itoa(req.ID) + "/close"
+	if _, _, body := admin.do("GET", "/admin/requests", nil, nil); !strings.Contains(body, "Awaiting close") {
+		t.Fatal("the returned request is not listed as awaiting close")
+	}
+	if _, _, body := admin.do("GET", "/admin/requests/badge", nil, nil); strings.TrimSpace(body) != "1" {
+		t.Fatalf("badge = %q, want 1", body)
+	}
+
+	must(t, a.store.RecordSensorEvent(ctx, slot, 0, "gun_removed"))
+	a.requests.SlotChanged(ctx, slot, 0)
+	if _, _, body := admin.do("POST", path, nil, hx); !strings.Contains(body, "Slot 1 is empty") {
+		t.Fatalf("close with a gun missing = %q", body)
+	}
+	if _, _, body := admin.do("GET", "/admin/requests", nil, nil); !strings.Contains(body, "Close anyway") {
+		t.Fatal("a flagged request must offer Close anyway")
+	}
+
+	status, _, body := admin.do("POST", path+"?force=1", nil, hx)
+	if status != 200 || body != "" {
+		t.Fatalf("forced close = %d %q", status, body)
+	}
+	if _, _, body := admin.do("GET", "/admin/requests/badge", nil, nil); strings.TrimSpace(body) != "" {
+		t.Fatalf("badge after close = %q, want empty", body)
+	}
+	if _, _, body := admin.do("POST", path, nil, hx); !strings.Contains(body, "already handled") {
+		t.Fatalf("closing twice = %q", body)
 	}
 }

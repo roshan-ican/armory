@@ -3,7 +3,9 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	"armory/migrations"
 
@@ -41,6 +43,10 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("add requests.requested_locker_id: %w", err)
 	}
+	if err := addRequestClose(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("add requests.closed_at: %w", err)
+	}
 	if err := addLockerLastSeen(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("add lockers.last_seen: %w", err)
@@ -58,6 +64,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("add slots.sensor_pos: %w", err)
 	}
 
+	if err := addSlotSensorDisabled(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("add slots.sensor_disabled: %w", err)
+	}
+
 	if err := migrateDropGuns(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("drop guns: %w", err)
@@ -65,6 +76,10 @@ func Open(path string) (*sql.DB, error) {
 	if err := migrateRequestSlots(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("fill request_slots: %w", err)
+	}
+	if err := migrateMaintenanceRequests(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("allow requested maintenance: %w", err)
 	}
 
 	return db, nil
@@ -97,6 +112,16 @@ func addLockerSensorReverse(db *sql.DB) error {
 		return err
 	}
 	_, err = db.Exec("ALTER TABLE lockers ADD COLUMN sensor_reverse INTEGER NOT NULL DEFAULT 0 CHECK (sensor_reverse IN (0, 1))")
+	return err
+}
+
+func addSlotSensorDisabled(db *sql.DB) error {
+	var n int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('slots') WHERE name = 'sensor_disabled'").Scan(&n)
+	if err != nil || n > 0 {
+		return err
+	}
+	_, err = db.Exec("ALTER TABLE slots ADD COLUMN sensor_disabled INTEGER NOT NULL DEFAULT 0 CHECK (sensor_disabled IN (0, 1))")
 	return err
 }
 
@@ -138,6 +163,22 @@ func addSlotSensorPos(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func addRequestClose(db *sql.DB) error {
+	var n int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('requests') WHERE name = 'closed_at'").Scan(&n)
+	if err != nil || n > 0 {
+		return err
+	}
+	if _, err := db.Exec("ALTER TABLE requests ADD COLUMN closed_at TEXT"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("ALTER TABLE requests ADD COLUMN close_note TEXT"); err != nil {
+		return err
+	}
+	_, err = db.Exec("UPDATE requests SET closed_at = COALESCE(returned_at, created_at) WHERE status = 'returned'")
+	return err
 }
 
 func addRequestedLocker(db *sql.DB) error {
@@ -236,4 +277,66 @@ func migrateRequestSlots(db *sql.DB) error {
 		collected_at, returned_at
 	FROM requests WHERE slot_id IS NOT NULL`)
 	return err
+}
+
+func tableSQL(db *sql.DB, name string) (string, error) {
+	var ddl string
+	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&ddl)
+	return ddl, err
+}
+
+func migrateMaintenanceRequests(db *sql.DB) error {
+	jobsSQL, err := tableSQL(db, "maintenance_jobs")
+	if err != nil {
+		return err
+	}
+	if strings.Contains(jobsSQL, "'requested'") {
+		return nil
+	}
+
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	for _, pragma := range []string{"PRAGMA foreign_keys = OFF", "PRAGMA legacy_alter_table = ON"} {
+		if _, err := conn.ExecContext(ctx, pragma); err != nil {
+			return err
+		}
+	}
+	defer conn.ExecContext(ctx, "PRAGMA foreign_keys = ON")
+	defer conn.ExecContext(ctx, "PRAGMA legacy_alter_table = OFF")
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	steps := []string{
+		"ALTER TABLE maintenance_jobs RENAME TO maintenance_jobs_old",
+		migrations.Schema,
+		`INSERT INTO maintenance_jobs (id, user_id, status, assigned_by, created_at, started_at, ended_at)
+		 SELECT id, user_id, status, assigned_by, created_at, started_at, ended_at FROM maintenance_jobs_old`,
+		"DROP TABLE maintenance_jobs_old",
+		migrations.Schema,
+	}
+	for _, step := range steps {
+		if _, err := tx.ExecContext(ctx, step); err != nil {
+			return err
+		}
+	}
+
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	broken := rows.Next()
+	rows.Close()
+	if broken {
+		return errors.New("foreign key check failed after rebuild")
+	}
+	return tx.Commit()
 }

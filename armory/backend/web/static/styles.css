@@ -524,6 +524,22 @@ td small {
 .slot-fault {
   --tone: var(--tertiary);
 }
+.slot-disabled {
+  --tone: var(--secondary);
+  opacity: 0.4;
+}
+button.slot {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+.slot-edit-hint {
+  margin: 0;
+  padding: 0 20px 14px;
+  text-align: center;
+}
 .slot-legend {
   display: flex;
   justify-content: center;
@@ -816,6 +832,10 @@ tr.flash {
 .password-field input {
   padding-right: 48px;
 }
+.password-field input::-ms-reveal,
+.password-field input::-ms-clear {
+  display: none;
+}
 .password-field button {
   position: absolute;
   top: 50%;
@@ -1031,6 +1051,7 @@ tr.flash {
 .person-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .rename-form {
@@ -1064,6 +1085,8 @@ tr.flash {
   font-weight: 550;
 }
 .access-state {
+  display: grid;
+  gap: 6px;
   justify-self: start;
 }
 @keyframes materialise {
@@ -1240,6 +1263,13 @@ section + section {
   display: flex;
   gap: 8px;
 }
+.plan-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--secondary);
+  font-size: 0.875rem;
+}
+
 .empty-note {
   margin: 0;
   padding: 28px 0;
@@ -1790,4 +1820,86 @@ section + section {
   margin: 0;
   color: var(--muted, #8e8e93);
   font-size: 13px;
+}
+
+.confirm-dialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--separator);
+  border-radius: 24px;
+  background: #1c1c1f;
+  color: var(--text);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.65);
+}
+.confirm-dialog[open] {
+  animation: confirm-in 180ms ease-out;
+}
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+.confirm-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 24px 22px;
+  text-align: center;
+}
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.confirm-dialog[data-tone="danger"] .confirm-icon {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.confirm-card h2 {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.confirm-card p {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.9375rem;
+  text-wrap: balance;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 16px;
+}
+.confirm-actions button {
+  flex: 1;
+  min-height: 46px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.button-danger-solid {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(255, 69, 58, 0.25);
+}
+.button-danger-solid:hover {
+  opacity: 0.88;
+}
+@keyframes confirm-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog[open] { animation: none; }
+}
+.slot > em.requested {
+  color: var(--green);
 }

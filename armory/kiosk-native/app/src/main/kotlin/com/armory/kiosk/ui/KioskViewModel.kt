@@ -1,6 +1,8 @@
 package com.armory.kiosk.ui
 
 import android.app.Application
+import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.armory.kiosk.BuildConfig
@@ -8,6 +10,7 @@ import com.armory.kiosk.data.Api
 import com.armory.kiosk.data.ApiException
 import com.armory.kiosk.data.GunRequest
 import com.armory.kiosk.data.Locker
+import com.armory.kiosk.data.MaintState
 import com.armory.kiosk.data.Person
 import com.armory.kiosk.face.Embedder
 import com.armory.kiosk.face.EnrollScanner
@@ -27,7 +30,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.sse.EventSource
 
 enum class Step {
-    FACE, WELCOME, CATALOG, GUNS, REVIEW, WAITING, OPEN, WRONG, COLLECTED, DECLINED, RETURNED,
+    FACE, WELCOME, MAINT_HOME, MAINTENANCE, CATALOG, GUNS, REVIEW, WAITING, OPEN, WRONG, COLLECTED, DECLINED, RETURNED, CLOSED,
     ENROLL_NAME, ENROLL_FACE, ENROLL_PENDING,
 }
 
@@ -47,6 +50,8 @@ data class UiState(
     val enrollName: String = "",
     val modelMissing: Boolean = false,
     val connected: Boolean = true,
+    val maint: MaintState? = null,
+    val problems: List<String> = emptyList(),
 ) {
     val selected: Locker? get() = catalog.firstOrNull { it.id == selectedId }
 }
@@ -91,10 +96,38 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
             UiState(modelMissing = embedder == null, connected = it.connected, forward = false)
         }
         val e = embedder ?: return
-        verify = VerifyScanner(e) { embedding -> viewModelScope.launch { match(embedding) } }.also { scanner ->
-            scanner.onState = { s -> _state.update { it.copy(scan = s) } }
+        verify = VerifyScanner(
+            e,
+            onIdentify = { embedding -> viewModelScope.launch { identify(embedding) } },
+            onEmbedding = { embedding -> viewModelScope.launch { match(embedding) } },
+        ).also { scanner ->
+            scanner.onState = { s ->
+                Log.i("FACETIME", "${SystemClock.elapsedRealtime() % 100000} $s")
+                _state.update { it.copy(scan = s) }
+            }
             scanner.restart()
         }
+    }
+
+    private suspend fun identify(embedding: FloatArray) {
+        val began = SystemClock.elapsedRealtime()
+        val name = try {
+            withContext(Dispatchers.IO) { api.identify(embedding) }
+        } catch (e: ApiException) {
+            _state.update { it.copy(notice = e.message.orEmpty()) }
+            delay(1500)
+            verify?.restart()
+            return
+        }
+        Log.i("FACETIME", "identify took ${SystemClock.elapsedRealtime() - began}ms -> ${name ?: "unknown"}")
+        if (name == null) {
+            _state.update { it.copy(notice = "We don't recognise you yet.") }
+            delay(1800)
+            _state.update { it.copy(notice = "") }
+            verify?.restart()
+            return
+        }
+        verify?.identified(name)
     }
 
     private suspend fun match(embedding: FloatArray) {
@@ -115,10 +148,97 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.update { it.copy(person = person) }
         speaker.say("${person.greeting.ifEmpty { "Welcome" }} ${person.name.substringBefore(' ')}.")
+        if (person.maintenance) {
+            if (person.say.isNotEmpty()) speaker.say(person.say, queue = true)
+            loadMaint()
+            go(Step.MAINTENANCE)
+            return
+        }
         go(Step.WELCOME)
         try {
             val current = withContext(Dispatchers.IO) { api.currentRequest() }
             if (current != null) follow(current.id)
+        } catch (e: ApiException) {
+            _state.update { it.copy(error = e.message.orEmpty()) }
+        }
+    }
+
+    private suspend fun loadMaint(): Boolean {
+        return try {
+            val fresh = withContext(Dispatchers.IO) { api.maintenance() }
+            _state.update { it.copy(maint = fresh) }
+            true
+        } catch (e: ApiException) {
+            val message = if (e.status == 404 || e.status == 405) "The server needs to be updated for maintenance." else e.message.orEmpty()
+            _state.update { it.copy(error = message) }
+            false
+        }
+    }
+
+    private fun refreshMaint() = viewModelScope.launch {
+        try {
+            val fresh = withContext(Dispatchers.IO) { api.maintenance() }
+            _state.update { it.copy(maint = fresh, connected = true) }
+        } catch (e: ApiException) {
+            if (e.status == 401) beginFace() else _state.update { it.copy(connected = false) }
+        }
+    }
+
+    fun chooseMaintenance() = viewModelScope.launch {
+        _state.update { it.copy(busy = true, error = "") }
+        val loaded = loadMaint()
+        _state.update { it.copy(busy = false) }
+        if (!loaded) return@launch
+        when (_state.value.maint?.job?.status) {
+            "assigned" -> startMaintenance()
+            "active" -> go(Step.MAINTENANCE)
+            else -> go(Step.MAINT_HOME)
+        }
+    }
+
+    fun startMaintenance() = viewModelScope.launch {
+        _state.update { it.copy(busy = true, error = "") }
+        try {
+            val say = withContext(Dispatchers.IO) { api.beginMaintenance() }
+            if (say.isNotEmpty()) speaker.say(say)
+            loadMaint()
+            go(Step.MAINTENANCE)
+        } catch (e: ApiException) {
+            _state.update { it.copy(error = e.message.orEmpty()) }
+        } finally {
+            _state.update { it.copy(busy = false) }
+        }
+    }
+
+    private fun maintaining() = _state.value.step in setOf(Step.MAINT_HOME, Step.MAINTENANCE)
+
+    fun requestMaintenance() = viewModelScope.launch {
+        if (_state.value.busy) return@launch
+        _state.update { it.copy(busy = true, error = "") }
+        try {
+            withContext(Dispatchers.IO) { api.requestMaintenance() }
+            loadMaint()
+        } catch (e: ApiException) {
+            _state.update { it.copy(error = e.message.orEmpty()) }
+        } finally {
+            _state.update { it.copy(busy = false) }
+        }
+    }
+
+    fun unlockLocker(lockerId: Long) = viewModelScope.launch {
+        _state.update { it.copy(error = "") }
+        try {
+            withContext(Dispatchers.IO) { api.unlockLocker(lockerId) }
+        } catch (e: ApiException) {
+            _state.update { it.copy(error = e.message.orEmpty()) }
+        }
+    }
+
+    fun changeCapacity(lockerId: Long, capacity: Int) = viewModelScope.launch {
+        _state.update { it.copy(error = "") }
+        try {
+            withContext(Dispatchers.IO) { api.setCapacity(lockerId, capacity) }
+            loadMaint()
         } catch (e: ApiException) {
             _state.update { it.copy(error = e.message.orEmpty()) }
         }
@@ -213,13 +333,45 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
         val step = when (value.status) {
             "pending" -> Step.WAITING
             "approved" -> if (value.wrong.isNotEmpty()) Step.WRONG else Step.OPEN
-            "collected" -> Step.COLLECTED
-            "returned" -> Step.RETURNED
+            "collected" -> if (value.wrong.isNotEmpty()) Step.WRONG else Step.COLLECTED
+            "returned" -> if (value.closed) null else if (value.wrong.isNotEmpty()) Step.WRONG else Step.RETURNED
             "rejected" -> Step.DECLINED
             else -> null
         }
         if (step != null && step != _state.value.step) go(step)
-        return value.status == "returned" || value.status == "rejected"
+        return value.status == "rejected" || (value.status == "returned" && value.closed)
+    }
+
+    fun finishMaintenance() = viewModelScope.launch {
+        _state.update { it.copy(busy = true, error = "") }
+        try {
+            withContext(Dispatchers.IO) { api.finishMaintenance() }
+        } catch (e: ApiException) {
+            if (e.status != 409) {
+                _state.update { it.copy(busy = false, error = e.message.orEmpty()) }
+                return@launch
+            }
+        }
+        beginFace()
+    }
+
+    fun confirmClose() = viewModelScope.launch {
+        val s = _state.value
+        val r = s.request ?: return@launch
+        if (s.busy) return@launch
+        _state.update { it.copy(busy = true, error = "", problems = emptyList()) }
+        try {
+            val result = withContext(Dispatchers.IO) { api.closeRequest(r.id) }
+            if (result.ok) go(Step.CLOSED) else _state.update { it.copy(problems = result.problems) }
+        } catch (e: ApiException) {
+            when (e.status) {
+                401 -> beginFace()
+                409 -> go(Step.CLOSED)
+                else -> _state.update { it.copy(error = e.message.orEmpty()) }
+            }
+        } finally {
+            _state.update { it.copy(busy = false) }
+        }
     }
 
     fun cancelRequest() = viewModelScope.launch {
@@ -290,6 +442,7 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
                         if (now - lastChange > 150) {
                             lastChange = now
                             if (browsing()) refreshCatalog()
+                            if (maintaining()) refreshMaint()
                             refreshPerson()
                         }
                         _state.update { it.copy(connected = true) }
@@ -309,6 +462,7 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
             while (isActive) {
                 delay(1000)
                 if (browsing()) refreshCatalog()
+                if (maintaining()) refreshMaint()
             }
         }
     }

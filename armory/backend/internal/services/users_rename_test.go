@@ -3,9 +3,7 @@ package services
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
-	"time"
 )
 
 func TestRenameTidiesTheName(t *testing.T) {
@@ -35,31 +33,5 @@ func TestRenameRejectsBlankAndUnknown(t *testing.T) {
 	}
 	if err := users.Rename(ctx, 9999, "Nobody"); !errors.Is(err, ErrUserNotFound) {
 		t.Fatalf("unknown: %v", err)
-	}
-}
-
-func TestRenamedPersonIsAddressedByTheNewNameOnApproval(t *testing.T) {
-	ctx := context.Background()
-	f := newFlow(t)
-	users := NewUserService(f.store)
-	if err := users.Rename(ctx, f.user.ID, "Rohan Verma"); err != nil {
-		t.Fatal(err)
-	}
-	spoken, cancel := f.hub.SubscribeSpeech()
-	defer cancel()
-	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case text := <-spoken:
-		if !strings.HasPrefix(text, "Good ") || !strings.Contains(text, " Rohan. Your request is approved.") {
-			t.Fatalf("approval said %q", text)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("nothing was spoken")
 	}
 }
