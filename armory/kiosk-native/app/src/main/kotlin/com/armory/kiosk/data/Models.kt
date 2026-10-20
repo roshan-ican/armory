@@ -1,6 +1,6 @@
 package com.armory.kiosk.data
 
-data class Slot(val no: Int, val reading: Int, val takenBy: String, val available: Boolean, val requestedBy: String = "")
+data class Slot(val no: Int, val reading: Int, val takenBy: String, val available: Boolean, val requestedBy: String = "", val disabled: Boolean = false)
 
 data class Locker(
     val id: Long,

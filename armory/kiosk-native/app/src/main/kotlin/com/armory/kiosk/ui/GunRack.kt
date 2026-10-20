@@ -38,6 +38,7 @@ fun GunRack(
     modifier: Modifier = Modifier,
     picked: List<Int> = emptyList(),
     onToggle: ((Int) -> Unit)? = null,
+    onDisabled: (() -> Unit)? = null,
     iconHeight: Int = 54,
     panelHeight: Int? = null,
 ) {
@@ -68,7 +69,11 @@ fun GunRack(
                             slot = slot,
                             picked = slot.no in picked,
                             iconHeight = iconHeight,
-                            onClick = if (onToggle != null && slot.available) ({ onToggle(slot.no) }) else null,
+                            onClick = when {
+                                onToggle != null && slot.available -> ({ onToggle(slot.no) })
+                                onDisabled != null && slot.disabled -> onDisabled
+                                else -> null
+                            },
                         )
                     }
                 }
@@ -111,6 +116,5 @@ private fun RackCell(locker: Locker, slot: Slot, picked: Boolean, iconHeight: In
                 "Requested by ${slot.requestedBy}", color = Color(0xFF30D158), fontSize = 10.sp, maxLines = 2,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
-        }
-    }
+        }    }
 }

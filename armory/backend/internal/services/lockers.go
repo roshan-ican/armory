@@ -13,6 +13,11 @@ import (
 type LockerService struct {
 	store           *database.Store
 	onSensorEnabled func(lockerIP string)
+	onSensorToggled func(ctx context.Context, lockerID int64, lockerIP string)
+}
+
+func (s *LockerService) OnSensorToggled(fn func(ctx context.Context, lockerID int64, lockerIP string)) {
+	s.onSensorToggled = fn
 }
 
 func (s *LockerService) OnSensorEnabled(fn func(lockerIP string)) {
@@ -127,6 +132,9 @@ func (s *LockerService) SetSensorDisabled(ctx context.Context, id, slotNo int64,
 	}
 	if !disabled && l.IPAddress != "" && s.onSensorEnabled != nil {
 		s.onSensorEnabled(l.IPAddress)
+	}
+	if s.onSensorToggled != nil {
+		s.onSensorToggled(ctx, l.ID, l.IPAddress)
 	}
 	return s.Get(ctx, id)
 }

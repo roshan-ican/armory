@@ -39,6 +39,7 @@ type CatalogSlot struct {
 	TakenBy     string `json:"taken_by"`
 	RequestedBy string `json:"requested_by"`
 	Available   bool   `json:"available"`
+	Disabled    bool   `json:"disabled"`
 }
 
 type CatalogItem struct {
@@ -196,6 +197,7 @@ func (s *RequestService) Catalog(ctx context.Context) ([]CatalogItem, error) {
 			slots = append(slots, CatalogSlot{
 				No: sl.SlotNo, Reading: sl.Reading, TakenBy: sl.TakenBy, RequestedBy: sl.RequestedBy,
 				Available: locker.Online && sl.Reading == 1 && sl.TakenBy == "",
+				Disabled:  sl.SensorDisabled,
 			})
 		}
 		out = append(out, CatalogItem{
@@ -456,19 +458,26 @@ func (s *RequestService) refreshAlarm(ctx context.Context, slotID int64) {
 	if err != nil {
 		return
 	}
+	s.RefreshLockerAlarm(ctx, info.LockerID, ip)
+}
+
+func (s *RequestService) RefreshLockerAlarm(ctx context.Context, lockerID int64, ip string) {
+	if ip == "" {
+		return
+	}
 	on := false
-	if approved, err := s.store.ApprovedRequestInLocker(ctx, info.LockerID); err == nil {
+	if approved, err := s.store.ApprovedRequestInLocker(ctx, lockerID); err == nil {
 		wrong, err := s.store.WrongSlots(ctx, approved.ID)
 		on = err == nil && len(wrong) > 0
 	}
 	if !on {
-		if returned, err := s.store.UnclosedReturnedRequestInLocker(ctx, info.LockerID); err == nil {
+		if returned, err := s.store.UnclosedReturnedRequestInLocker(ctx, lockerID); err == nil {
 			wrong, err := s.store.WrongSlots(ctx, returned.ID)
 			on = err == nil && len(wrong) > 0
 		}
 	}
 	if !on {
-		unauthorized, err := s.store.HasUnauthorizedEmpty(ctx, info.LockerID)
+		unauthorized, err := s.store.HasUnauthorizedEmpty(ctx, lockerID)
 		on = err == nil && unauthorized
 	}
 	if err := s.hw.Alarm(ctx, ip, on); err != nil {

@@ -81,6 +81,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 	go outputs.Run(ctx)
 	requests := services.NewRequestService(store, outputs, hub)
 	sensors.OnSlotChange(requests.SlotChanged)
+	lockers.OnSensorToggled(requests.RefreshLockerAlarm)
 	sessions := services.NewSessions()
 
 	maintenance := services.NewMaintenanceService(store, outputs, hub)

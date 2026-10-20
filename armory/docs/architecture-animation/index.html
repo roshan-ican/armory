@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Locker System Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#fff;min-height:100%}
+body{display:flex;align-items:center;justify-content:center}
+svg{width:100%;max-width:1280px;height:auto;display:block;font-family:"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif;cursor:pointer}
+.mono{font-family:"JetBrains Mono",Consolas,monospace;letter-spacing:-.02em}
+.halo{paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<svg id="svg" viewBox="0 0 1280 704" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9z" fill="#2563eb"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9z" fill="#f97316"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9z" fill="#16a34a"/></marker>
+  </defs>
+  <rect width="1280" height="704" fill="#fff"/>
+  <g id="root">
+    <text x="40" y="50" font-size="29" font-weight="800" letter-spacing="-0.5" fill="#0f172a">Smart Locker</text>
+    <g font-size="13" fill="#475569">
+      <line x1="40" y1="72" x2="68" y2="72" stroke="#2563eb" stroke-width="3" stroke-dasharray="6 5"/><text x="78" y="77">HTTPS · apps ↔ Go backend</text>
+      <line x1="40" y1="94" x2="68" y2="94" stroke="#f97316" stroke-width="3" stroke-dasharray="6 5"/><text x="78" y="99">UDP · Go backend ↔ ESP32 boards</text>
+      <line x1="40" y1="116" x2="68" y2="116" stroke="#16a34a" stroke-width="3" stroke-dasharray="6 5"/><text x="78" y="121">SSE · live updates + spoken sentences</text>
+    </g>
+
+    <g id="conns" fill="none" stroke-width="2.5" stroke-dasharray="7 8" opacity="0">
+      <path id="pReq" d="M240 330 C330 330 380 330 470 330" stroke="#2563eb" marker-end="url(#aB)"/>
+      <path id="pSse" d="M470 400 C380 400 330 400 240 400" stroke="#16a34a" marker-end="url(#aG)"/>
+      <path id="pNotify" d="M560 230 L560 150" stroke="#16a34a" marker-end="url(#aG)"/>
+      <path id="pApprove" d="M630 150 L630 230" stroke="#2563eb" marker-end="url(#aB)"/>
+      <path id="pDoor" d="M710 290 C800 290 820 150 900 150" stroke="#f97316" marker-end="url(#aO)"/>
+      <path id="pLock" d="M710 380 C800 380 820 470 900 470" stroke="#f97316" marker-end="url(#aO)"/>
+      <path id="pSensor" d="M900 560 C820 560 800 430 710 430" stroke="#f97316" marker-end="url(#aO)"/>
+    </g>
+
+    <g id="bubble" opacity="0">
+      <rect id="bubRect" x="40" y="150" width="200" height="60" rx="14" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+      <path id="bubTail" d="M125 209 L140 224 L155 209z" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+      <rect x="123" y="207" width="34" height="4" fill="#f0fdf4"/>
+      <text id="bub1" x="140" y="175" font-size="14" font-weight="600" text-anchor="middle" fill="#14532d"></text>
+      <text id="bub2" x="140" y="195" font-size="14" font-weight="600" text-anchor="middle" fill="#14532d"></text>
+    </g>
+
+    <g id="n-kiosk">
+      <rect id="h-kiosk" x="36" y="226" width="208" height="248" rx="22" fill="none" stroke="#2563eb" stroke-width="6" opacity="0"/>
+      <rect x="40" y="230" width="200" height="240" rx="18" fill="#eff6ff" stroke="#93c5fd" stroke-width="2"/>
+      <text x="60" y="262" font-size="20" font-weight="800" letter-spacing="-0.3" fill="#1e3a8a">Android Kiosk</text>
+      <text x="60" y="281" font-size="13" fill="#475569">Kotlin · Jetpack Compose</text>
+      <rect x="90" y="298" width="100" height="140" rx="14" fill="#fff" stroke="#1e293b" stroke-width="3"/>
+      <rect x="98" y="310" width="84" height="116" rx="6" fill="#f1f5f9"/>
+      <circle cx="140" cy="350" r="15" fill="#94a3b8"/>
+      <path d="M114 398 a26 22 0 0 1 52 0z" fill="#94a3b8"/>
+      <g id="scan" opacity="0">
+        <circle id="scanRing" cx="0" cy="0" r="34" fill="none" stroke="#2563eb" stroke-width="3"/>
+      </g>
+      <line id="scanLine" x1="106" y1="330" x2="174" y2="330" stroke="#2563eb" stroke-width="2.5" opacity="0"/>
+      <g id="check" opacity="0" transform="translate(166 322)"><circle r="11" fill="#16a34a"/><path d="M-5 0 L-1.5 4 L5 -4" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <path d="M200 408 h6 l9 -7 v24 l-9 -7 h-6z" fill="#334155"/>
+      <g id="spk" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" opacity="0">
+        <path d="M219 408 a7 7 0 0 1 0 10"/><path d="M224 403 a13 13 0 0 1 0 20"/>
+      </g>
+      <text x="60" y="458" font-size="11" fill="#64748b">ML Kit face · on-device TTS</text>
+    </g>
+
+    <g id="n-go">
+      <rect id="h-go" x="466" y="226" width="248" height="248" rx="22" fill="none" stroke="#4f46e5" stroke-width="6" opacity="0"/>
+      <rect x="470" y="230" width="240" height="240" rx="18" fill="#eef2ff" stroke="#a5b4fc" stroke-width="2"/>
+      <text x="490" y="262" font-size="20" font-weight="800" letter-spacing="-0.3" fill="#312e81">Go Backend</text>
+      <text x="490" y="281" font-size="12" fill="#475569" class="mono">HTTPS :8443 · UDP :47810</text>
+      <g id="chip" opacity="0">
+        <rect id="chipRect" x="488" y="298" width="204" height="34" rx="17" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text id="chipText" class="mono" x="590" y="320" font-size="10.5" font-weight="700" text-anchor="middle" fill="#1e3a8a"></text>
+      </g>
+      <g id="db">
+        <path d="M556 392 v40 a34 9 0 0 0 68 0 v-40" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+        <ellipse id="dbTop" cx="590" cy="392" rx="34" ry="9" fill="#c7d2fe" stroke="#6366f1" stroke-width="2"/>
+        <text x="590" y="436" font-size="12" font-weight="700" text-anchor="middle" fill="#3730a3">SQLite</text>
+      </g>
+      <rect id="dbFlash" x="548" y="376" width="84" height="66" rx="12" fill="none" stroke="#6366f1" stroke-width="4" opacity="0"/>
+    </g>
+
+    <g id="n-admin">
+      <rect id="h-admin" x="466" y="36" width="248" height="118" rx="22" fill="none" stroke="#7c3aed" stroke-width="6" opacity="0"/>
+      <rect x="470" y="40" width="240" height="110" rx="18" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="2"/>
+      <text x="490" y="72" font-size="20" font-weight="800" letter-spacing="-0.3" fill="#4c1d95">Admin Web</text>
+      <text x="490" y="91" font-size="13" fill="#475569">htmx PWA</text>
+      <g id="btn">
+        <rect x="588" y="102" width="100" height="32" rx="9" fill="#2563eb"/>
+        <text x="638" y="123" font-size="13.5" font-weight="700" text-anchor="middle" fill="#fff">Approve</text>
+      </g>
+      <g id="badge" opacity="0"><circle cx="700" cy="46" r="13" fill="#ef4444"/><text x="700" y="51" font-size="13" font-weight="700" text-anchor="middle" fill="#fff">1</text></g>
+    </g>
+
+    <g id="n-door">
+      <rect id="h-door" x="896" y="46" width="318" height="218" rx="22" fill="none" stroke="#ea580c" stroke-width="6" opacity="0"/>
+      <rect x="900" y="50" width="310" height="210" rx="18" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
+      <text x="920" y="82" font-size="20" font-weight="800" letter-spacing="-0.3" fill="#7c2d12">Door Controller</text>
+      <text x="920" y="101" font-size="13" fill="#475569">ESP32 · switches the lock's power</text>
+      <rect x="920" y="118" width="112" height="28" rx="14" fill="#fff" stroke="#fdba74" stroke-width="2"/>
+      <circle id="led" cx="936" cy="132" r="6" fill="#16a34a"/>
+      <text id="ledText" class="mono" x="948" y="137" font-size="11.5" font-weight="700" fill="#334155">POWER ON</text>
+      <g id="lockDoor" transform="translate(938 192)"></g>
+      <text x="920" y="244" font-size="11.5" fill="#64748b">power off → lock releases</text>
+      <rect x="1068" y="108" width="124" height="138" rx="4" fill="#1e293b" stroke="#9a3412" stroke-width="3"/>
+      <g id="doorPanel" transform="translate(1072 112)">
+        <rect width="116" height="130" rx="3" fill="#fdba74" stroke="#c2410c" stroke-width="2"/>
+        <rect x="14" y="14" width="88" height="46" rx="3" fill="none" stroke="#c2410c" stroke-width="2" opacity=".5"/>
+        <rect x="14" y="70" width="88" height="46" rx="3" fill="none" stroke="#c2410c" stroke-width="2" opacity=".5"/>
+        <circle cx="100" cy="66" r="5" fill="#7c2d12"/>
+      </g>
+    </g>
+
+    <g id="n-locker">
+      <rect id="h-locker" x="896" y="376" width="318" height="308" rx="22" fill="none" stroke="#ea580c" stroke-width="6" opacity="0"/>
+      <rect x="900" y="380" width="310" height="300" rx="18" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
+      <text x="920" y="412" font-size="20" font-weight="800" letter-spacing="-0.3" fill="#7c2d12">Locker ESP32</text>
+      <text x="920" y="431" font-size="13" fill="#475569">sensors · buzzer · lock</text>
+      <g id="lockLocker" transform="translate(1168 398) scale(.8)"></g>
+      <g id="slots"></g>
+      <g transform="translate(930 628)">
+        <rect width="36" height="26" rx="7" fill="#334155"/>
+        <circle cx="18" cy="13" r="6" fill="#fdba74"/>
+        <text x="46" y="18" font-size="12" fill="#64748b">buzzer</text>
+      </g>
+      <g id="waves" fill="none" stroke-width="3" stroke-linecap="round" stroke="#16a34a">
+        <path id="w1" d="M1030 635 a9 9 0 0 1 0 14" opacity="0"/>
+        <path id="w2" d="M1038 630 a16 16 0 0 1 0 24" opacity="0"/>
+        <path id="w3" d="M1046 625 a23 23 0 0 1 0 34" opacity="0"/>
+      </g>
+      <text id="buzLabel" class="mono" x="1066" y="648" font-size="17" font-weight="700" fill="#16a34a" opacity="0"></text>
+    </g>
+
+    <g id="dots"></g>
+
+    
+    <g id="cap" display="none">
+      <circle id="capNum" cx="62" cy="746" r="20" fill="#0f172a"/>
+      <text id="capNumT" x="62" y="752" font-size="18" font-weight="700" text-anchor="middle" fill="#fff"></text>
+      <text id="capTitle" x="96" y="741" font-size="22" font-weight="800" letter-spacing="-0.3" fill="#0f172a"></text>
+      <text id="capDesc" x="96" y="768" font-size="15.5" font-weight="500" fill="#475569"></text>
+    </g>
+    <g id="progress" display="none"></g>
+  </g>
+</svg>
+
+<script>
+const $=id=>document.getElementById(id);
+const NS="http://www.w3.org/2000/svg";
+const clamp=x=>Math.min(1,Math.max(0,x));
+const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const P=(t,a,b)=>clamp((t-a)/(b-a));
+const E=(t,a,b)=>ease(P(t,a,b));
+const T=27.8;
+const BLUE="#2563eb",ORANGE="#f97316",GREEN="#16a34a",RED="#dc2626";
+
+const act=(t,iv)=>Math.max(0,...iv.map(([a,b])=>Math.min(P(t,a-.3,a),1-P(t,b,b+.3))));
+
+function el(tag,attrs,parent){
+  const e=document.createElementNS(NS,tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);
+  if(parent)parent.appendChild(e);
+  return e;
+}
+
+function lockMarkup(g){
+  g.innerHTML='<path class="sh" d="M5 0 v-8 a9 9 0 0 1 18 0 v8" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/><rect class="bd" width="28" height="22" rx="5" fill="#334155"/><circle cx="14" cy="11" r="3" fill="#fff"/>';
+}
+lockMarkup($("lockDoor"));
+lockMarkup($("lockLocker"));
+function setLock(g,open){
+  g.querySelector(".sh").setAttribute("transform",`translate(${open*6} ${-open*7})`);
+  g.querySelector(".bd").setAttribute("fill",open>.5?GREEN:"#334155");
+  g.querySelector(".sh").setAttribute("stroke",open>.5?GREEN:"#334155");
+}
+
+const slotX=[930,1020,1110];
+const items=[],slotRects=[],slotLabels=[],sensLines=[];
+slotX.forEach((x,i)=>{
+  const g=el("g",{},$("slots"));
+  slotRects.push(el("rect",{x,y:450,width:70,height:124,rx:10,fill:"#fff",stroke:"#cbd5e1","stroke-width":2},g));
+  el("rect",{x:x+25,y:456,width:20,height:9,rx:3,fill:"#334155"},g);
+  sensLines.push(el("line",{x1:x+35,y1:468,x2:x+35,y2:504,stroke:ORANGE,"stroke-width":2,"stroke-dasharray":"3 4"},g));
+  const it=el("g",{},g);
+  el("rect",{x:x+13,y:508,width:44,height:56,rx:8,fill:"#475569"},it);
+  el("rect",{x:x+22,y:514,width:26,height:8,rx:3,fill:"#94a3b8"},it);
+  items.push(it);
+  slotLabels.push(el("text",{x:x+35,y:594,"font-size":12.5,"text-anchor":"middle",fill:"#64748b"},g));
+  slotLabels[i].textContent=String(i+1);
+});
+
+const paths={};
+["pReq","pSse","pNotify","pApprove","pDoor","pLock","pSensor"].forEach(id=>paths[id]=$(id));
+const lens={};for(const k in paths)lens[k]=paths[k].getTotalLength();
+
+const dotDefs=[
+  ["pReq",4.4,5.4,BLUE,"face vector"],
+  ["pNotify",6.8,7.6,GREEN,"new request"],
+  ["pApprove",8.8,9.6,BLUE,"approve"],
+  ["pDoor",10.0,11.0,ORANGE,"OPEN"],
+  ["pLock",10.0,11.0,ORANGE,"UNLOCK"],
+  ["pSse",11.2,12.2,GREEN,"say: approved"],
+  ["pSensor",15.0,15.8,ORANGE,"slot 2 empty"],
+  ["pLock",16.4,17.2,ORANGE,"beep"],
+  ["pSse",16.6,17.6,GREEN,"say: correct"],
+  ["pSensor",20.8,21.6,ORANGE,"slot 3 empty"],
+  ["pLock",21.8,22.6,RED,"ALARM"],
+  ["pSse",22.0,23.0,GREEN,"say: wrong"],
+  ["pDoor",24.8,25.6,ORANGE,"CLOSE"]
+].map(([path,a,b,color,label])=>{
+  const g=el("g",{opacity:0},$("dots"));
+  el("circle",{r:13,fill:color,opacity:.22},g);
+  el("circle",{r:7,fill:color},g);
+  const tx=el("text",{class:"halo mono","font-size":12,"font-weight":700,fill:color,"text-anchor":"middle"},g);
+  tx.textContent=label;
+  const vertical=path==="pNotify"||path==="pApprove";
+  tx.setAttribute(vertical?"x":"y",vertical?20:-17);
+  if(vertical){tx.setAttribute("y",4);tx.setAttribute("text-anchor","start");}
+  return{path,a,b,g};
+});
+
+const caps=[
+  [2.8,5.4,"Face scan on the tablet","The Android kit finds the face and turns it into a number vector. Only that vector leaves the tablet."],
+  [5.4,8.0,"Go matches the face and saves the request","Go compares the vector with enrolled people, stores the request in SQLite and pushes an update to the admin."],
+  [8.0,10.0,"Admin approves","One tap in the web app tells the backend to open the door and the locker."],
+  [10.0,14.0,"Door and locker open","Go sends a UDP command. The door controller cuts power, the lock releases and the door opens. The tablet speaks the approval."],
+  [14.0,16.4,"Sensor sees the item leave","The sensor behind each item reports its slot about 10 times a second. Go waits for stable readings."],
+  [16.4,20.0,"Right item: one short beep","Go matches the slot to the request, sends a short beep and the sentence it wrote is spoken by the tablet."],
+  [20.0,25.0,"Wrong item: long alarm","Not in the request. The buzzer repeats a long alarm and the tablet tells the user what to fix, until the item is put back."],
+  [25.0,T,"Door closes and locks","Power returns so the lock engages again. Ready for the next request."]
+];
+const prog=[];
+caps.forEach((c,i)=>{prog.push(el("circle",{cx:1136+i*16,cy:746,r:4.5,fill:"#cbd5e1"},$("progress")));});
+
+const bubbles=[
+  [12.2,14.2,"Request approved.","The door is open.",false],
+  [17.6,19.8,"Slot 2 is correct.","",false],
+  [23.0,25.2,"Wrong item. Please","pick from slot 2.",true]
+];
+const chips=[
+  [5.4,"Face matched ✓",BLUE,"#dbeafe"],
+  [6.2,"Request saved · pending",BLUE,"#dbeafe"],
+  [9.6,"Approved · unlock + open door",GREEN,"#dcfce7"],
+  [15.8,"Slot 2 empty = requested ✓",GREEN,"#dcfce7"],
+  [21.6,"Slot 3 not requested ✗",RED,"#fee2e2"],
+  [25.0,"",BLUE,"#dbeafe"]
+];
+const nodeIds=[["n-kiosk",.2],["n-go",.6],["n-admin",1.0],["n-door",1.4],["n-locker",1.8]];
+
+function frame(t){
+  $("root").style.opacity=1-E(t,27.2,27.8);
+  nodeIds.forEach(([id,s])=>{
+    const o=E(t,s,s+.6);
+    const g=$(id);g.style.opacity=o;g.setAttribute("transform",`translate(0 ${(1-o)*14})`);
+  });
+  const conns=$("conns");
+  conns.style.opacity=E(t,2.2,2.9);
+  conns.setAttribute("stroke-dashoffset",-(t*28));
+  Object.values(paths).forEach(p=>p.setAttribute("stroke-dashoffset",-(t*28)));
+
+  $("h-kiosk").style.opacity=.35*act(t,[[2.8,5.4],[11.2,14.2],[16.6,19.8],[22,25.2]]);
+  $("h-go").style.opacity=.35*act(t,[[5.4,10],[15,17.8],[20.8,23.5]]);
+  $("h-admin").style.opacity=.35*act(t,[[6.8,10]]);
+  $("h-door").style.opacity=.35*act(t,[[10,14],[24.8,27]]);
+  $("h-locker").style.opacity=.35*act(t,[[10,12.5],[14,25]]);
+
+  const scanOn=t>3&&t<4.8;
+  $("scan").setAttribute("opacity",scanOn?1:0);
+  const s=1+.07*Math.sin(t*8);
+  $("scan").setAttribute("transform",`translate(140 358) scale(${s})`);
+  $("scanRing").setAttribute("stroke",t>4.4?GREEN:BLUE);
+  const sl=$("scanLine");
+  sl.setAttribute("opacity",t>3&&t<4.4?1:0);
+  const ph=((t-3)*1.1)%2,yy=330+(ph<1?ph:2-ph)*56;
+  sl.setAttribute("y1",yy);sl.setAttribute("y2",yy);
+  $("check").setAttribute("opacity",E(t,4.4,4.7)*(1-E(t,5.6,5.9)));
+
+  let chip=null;chips.forEach(c=>{if(t>=c[0])chip=c;});
+  const chipO=chip&&chip[2]!==undefined&&chip[1]?E(t,chip[0],chip[0]+.3):0;
+  $("chip").setAttribute("opacity",chipO);
+  if(chip&&chip[1]){
+    $("chipText").textContent=chip[1];
+    $("chipText").setAttribute("fill",chip[2]);
+    $("chipRect").setAttribute("stroke",chip[2]);
+    $("chipRect").setAttribute("fill",chip[3]);
+  }
+  $("dbFlash").setAttribute("opacity",.8*act(t,[[6.3,7.0],[9.6,10]]));
+
+  $("badge").setAttribute("opacity",(t>=7.6&&t<9.0)?1:0);
+  const pop=E(t,7.6,7.9);
+  $("badge").setAttribute("transform",`translate(${700*(1-pop)} ${46*(1-pop)}) scale(${pop})`);
+  const pulse=t>8.2&&t<8.8?1+.12*Math.sin((t-8.2)/.6*Math.PI):1;
+  $("btn").setAttribute("transform",`translate(${638*(1-pulse)} ${118*(1-pulse)}) scale(${pulse})`);
+
+  dotDefs.forEach(d=>{
+    if(t<d.a||t>d.b){d.g.setAttribute("opacity",0);return;}
+    const k=ease(P(t,d.a,d.b));
+    const pt=paths[d.path].getPointAtLength(lens[d.path]*k);
+    d.g.setAttribute("transform",`translate(${pt.x} ${pt.y})`);
+    d.g.setAttribute("opacity",Math.min(1,(t-d.a)/.15,(d.b-t)/.15));
+  });
+
+  const powerOff=t>=11.0&&t<25.6;
+  $("led").setAttribute("fill",powerOff?RED:GREEN);
+  $("ledText").textContent=powerOff?"POWER OFF":"POWER ON";
+  const lOpen=E(t,11.3,11.8)-E(t,26.4,26.8);
+  const dOpen=E(t,11.8,13.0)-E(t,25.6,26.4);
+  setLock($("lockDoor"),lOpen);
+  setLock($("lockLocker"),E(t,11.3,11.8)-E(t,26.4,26.8));
+  $("doorPanel").setAttribute("transform",`translate(1072 112) scale(${1-.8*dOpen} 1)`);
+
+  const req=t>=9.6&&t<25;
+  slotRects[1].setAttribute("stroke",req?BLUE:"#cbd5e1");
+  slotRects[1].setAttribute("stroke-width",req?3.5:2);
+  slotLabels[1].textContent=req?"2 · requested":"2";
+  slotLabels[1].setAttribute("fill",req?BLUE:"#64748b");
+
+  const pick1=E(t,14.2,15.0);
+  const pick3=E(t,20.0,20.8)-E(t,24.4,25.0);
+  [[0,0],[1,pick1],[2,pick3]].forEach(([i,p])=>{
+    items[i].setAttribute("transform",`translate(0 ${p*70})`);
+    items[i].setAttribute("opacity",1-p);
+    sensLines[i].setAttribute("opacity",(1-p)*(.5+.5*Math.sin(t*10+i)));
+  });
+
+  const beep=P(t,17.2,17.8);
+  const beepOn=t>=17.2&&t<17.8;
+  const alarmOn=t>=22.6&&t<25.0;
+  const col=alarmOn?RED:GREEN;
+  ["w1","w2","w3"].forEach((id,k)=>{
+    let o=0;
+    if(beepOn&&k<2)o=Math.sin(beep*Math.PI)*(k?.7:1);
+    if(alarmOn)o=.2+.8*Math.max(0,Math.sin(t*7-k*.9));
+    $(id).setAttribute("opacity",o);
+    $(id).setAttribute("stroke",col);
+  });
+  const bl=$("buzLabel");
+  bl.textContent=alarmOn?"ALARM":(beepOn?"BEEP":"");
+  bl.setAttribute("fill",col);bl.setAttribute("opacity",(alarmOn||beepOn)?1:0);
+
+  let b=null;bubbles.forEach(x=>{if(t>=x[0]&&t<x[1])b=x;});
+  if(b){
+    const o=Math.min(1,(t-b[0])/.25,(b[1]-t)/.25);
+    $("bubble").setAttribute("opacity",o);
+    const red=b[4],f=red?"#fef2f2":"#f0fdf4",c=red?RED:GREEN;
+    $("bubRect").setAttribute("fill",f);$("bubRect").setAttribute("stroke",c);
+    $("bubTail").setAttribute("fill",f);$("bubTail").setAttribute("stroke",c);
+    $("bub1").textContent=b[2];$("bub2").textContent=b[3];
+    $("bub1").setAttribute("fill",red?"#7f1d1d":"#14532d");$("bub2").setAttribute("fill",red?"#7f1d1d":"#14532d");
+    $("spk").setAttribute("opacity",.4+.6*Math.abs(Math.sin(t*9)));
+    $("spk").setAttribute("stroke",c);
+  }else{
+    $("bubble").setAttribute("opacity",0);
+    $("spk").setAttribute("opacity",0);
+  }
+
+  let ci=-1;caps.forEach((c,i)=>{if(t>=c[0]&&t<c[1])ci=i;});
+  if(ci<0){
+    $("capNumT").textContent="▶";
+    $("capTitle").textContent="Smart inventory locker, end to end";
+    $("capDesc").textContent="Tool cribs · lab equipment · IT assets · pharmacy cabinets: same flow, any item";
+    $("cap").setAttribute("opacity",1);
+  }else{
+    const c=caps[ci];
+    $("capNumT").textContent=String(ci+1);
+    $("capTitle").textContent=c[2];
+    $("capDesc").textContent=c[3];
+    $("cap").setAttribute("opacity",.3+.7*E(t,c[0],c[0]+.4));
+  }
+  prog.forEach((p,i)=>p.setAttribute("fill",i===ci?"#0f172a":(i<ci?"#94a3b8":"#cbd5e1")));
+}
+
+let paused=false,t0=performance.now(),offset=0;
+function tick(now){
+  if(!paused){
+    const t=((now-t0)/1000+offset)%T;
+    frame(t);
+  }
+  requestAnimationFrame(tick);
+}
+window.__setT=t=>{paused=true;frame(t);};
+const q=new URLSearchParams(location.search).get("t");
+if(q!==null){window.__setT(parseFloat(q));}
+$("svg").addEventListener("click",()=>{
+  if(paused){paused=false;t0=performance.now();}else{paused=true;}
+});
+if(!matchMedia("(prefers-reduced-motion: reduce)").matches||q!==null)requestAnimationFrame(tick);
+else window.__setT(14.8);
+</script>
+</body>
+</html>

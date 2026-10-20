@@ -179,7 +179,7 @@ class Api(private val baseUrl: String) {
             available = o.optInt("available"),
             slots = List(slots.length()) {
                 val s = slots.getJSONObject(it)
-                Slot(s.getInt("no"), s.optInt("reading", -1), s.optString("taken_by"), s.optBoolean("available"), s.optString("requested_by"))
+                Slot(s.getInt("no"), s.optInt("reading", -1), s.optString("taken_by"), s.optBoolean("available"), s.optString("requested_by"), s.optBoolean("disabled"))
             },
         )
     }

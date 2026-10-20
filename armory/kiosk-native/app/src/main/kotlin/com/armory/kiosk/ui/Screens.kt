@@ -40,6 +40,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -306,6 +309,7 @@ private fun MaintenanceStep(model: KioskViewModel, state: UiState) {
 }
 
 fun toneOf(locker: Locker, slot: Slot): Color = when {
+    slot.disabled -> Palette.Grey
     !locker.online || slot.reading == 2 -> Palette.Yellow
     slot.reading == 1 -> Palette.Green
     slot.reading == 0 -> Palette.Red
@@ -352,8 +356,7 @@ private fun CatalogStep(model: KioskViewModel, state: UiState) {
                                         Text("Taken by ${slot.takenBy}", color = Color(0xFFFF918A), fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
                                     } else if (slot.requestedBy.isNotEmpty()) {
                                         Text("Requested by ${slot.requestedBy}", color = Palette.Green, fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
-                                    }
-                                }
+                                    }                                }
                             }
                         }
                         Legend(locker)
@@ -385,7 +388,8 @@ private fun Legend(locker: Locker) {
             LegendItem(Palette.Green, "Present")
             LegendItem(Palette.Red, "Missing")
             LegendItem(Palette.Yellow, "Sensor not there")
-            if (locker.slots.any { it.reading < 0 }) LegendItem(Palette.Grey, "No data yet")
+            if (locker.slots.any { it.disabled }) LegendItem(Palette.Grey, "Disabled")
+            if (locker.slots.any { it.reading < 0 && !it.disabled }) LegendItem(Palette.Grey, "No data yet")
         } else {
             LegendItem(Palette.Yellow, "No sensor data is being received")
         }
@@ -406,12 +410,16 @@ private fun GunsStep(model: KioskViewModel, state: UiState) {
     Screen {
         Row(Modifier.fillMaxWidth()) { QuietButton("‹ Back") { model.back(Step.CATALOG) } }
         Copy("STEP 2 OF 3", "Choose your ${locker?.kind.orEmpty()}s", "Tap each gun you need from ${locker?.name.orEmpty()}. You can pick more than one.")
+        var showDisabled by remember { mutableStateOf(false) }
         if (locker != null) {
             GunRack(
-                locker, Modifier.width(680.dp), picked = state.picked, onToggle = model::togglePick,
+                locker, Modifier.width(680.dp), picked = state.picked,
+                onToggle = { showDisabled = false; model.togglePick(it) },
+                onDisabled = { showDisabled = true },
                 iconHeight = if (locker.kind == "pistol") 84 else 130, panelHeight = 300,
             )
         }
+        if (showDisabled) Text("Disabled", color = Palette.Muted, fontSize = 14.sp, textAlign = TextAlign.Center)
     }
 }
 
