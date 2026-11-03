@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"armory/internal/database"
 	"armory/internal/live"
@@ -15,6 +16,7 @@ type SensorService struct {
 	onChange func(ctx context.Context, slotID int64, reading byte)
 	mu       sync.Mutex
 	resync   map[string]bool
+	seen     map[string]time.Time
 }
 
 func (s *SensorService) OnSlotChange(fn func(ctx context.Context, slotID int64, reading byte)) {
@@ -22,7 +24,7 @@ func (s *SensorService) OnSlotChange(fn func(ctx context.Context, slotID int64, 
 }
 
 func NewSensorService(store *database.Store, hub *live.Hub) *SensorService {
-	return &SensorService{store: store, hub: hub, resync: make(map[string]bool)}
+	return &SensorService{store: store, hub: hub, resync: make(map[string]bool), seen: make(map[string]time.Time)}
 }
 
 func (s *SensorService) RequestResync(lockerIP string) {
@@ -43,7 +45,13 @@ func (s *SensorService) Seen(ctx context.Context, lockerIP string) error {
 	if err := s.store.MarkLockerSeen(ctx, lockerIP); err != nil {
 		return err
 	}
-	s.hub.Publish()
+	s.mu.Lock()
+	last, known := s.seen[lockerIP]
+	s.seen[lockerIP] = time.Now()
+	s.mu.Unlock()
+	if !known || time.Since(last) > 4*time.Second {
+		s.hub.Publish()
+	}
 	return nil
 }
 

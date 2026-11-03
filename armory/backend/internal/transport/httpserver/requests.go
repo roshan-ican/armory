@@ -255,12 +255,30 @@ func (s *Server) requestsPage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	active, err := s.maintain.Active(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	people, err := s.users.List(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	var requesters []models.User
+	for _, u := range people {
+		if u.Role == "requester" {
+			requesters = append(requesters, u)
+		}
+	}
 	s.render(w, "requests", "layout", map[string]any{
-		"Title":       "Requests",
-		"Pending":     pending,
-		"Awaiting":    awaiting,
-		"Maintenance": maintenance,
-		"History":     history,
+		"Title":             "Requests",
+		"Pending":           pending,
+		"Awaiting":          awaiting,
+		"Maintenance":       maintenance,
+		"ActiveMaintenance": active,
+		"Requesters":        requesters,
+		"History":           history,
 	})
 }
 

@@ -229,6 +229,7 @@ private fun WelcomeStep(model: KioskViewModel, state: UiState) {
                 else -> "Maintenance"
             },
         ) { if (!state.busy) model.chooseMaintenance() }
+        QuietButton("‹ Not you? Back to face scan", onClick = model::beginFace)
         ErrorLine(state.error)
     }
 }

@@ -2,7 +2,7 @@
 <div
   id="requests-live"
   hx-get="/admin/requests?page={{.History.Page}}"
-  hx-trigger="armory:changed from:body"
+  hx-trigger="armory:changed[!document.querySelector('#maintenance-start[open], #confirm-dialog[open]')] from:body"
   hx-select="#requests-live"
   hx-swap="outerHTML"
 >
@@ -13,6 +13,51 @@
     </div>
     <span class="record-count">{{len .Pending}} waiting</span>
   </div>
+
+  <details id="maintenance-start" class="panel add-locker">
+    <summary>Start maintenance for someone</summary>
+    <form
+      class="create-form"
+      hx-post="/admin/maintenance/start"
+      hx-swap="none"
+      hx-select="unset"
+      hx-on::before-request="document.getElementById('maintenance-start-error').textContent = ''"
+    >
+      <div class="form-grid">
+        <select name="user_id" required>
+          <option value="">Who is doing it?</option>
+          {{range .Requesters}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        </select>
+        <button class="button-primary" type="submit">Start maintenance</button>
+      </div>
+      <p class="hint">Use this when the tablet is unavailable. It starts at once and opens the door; no approval needed.</p>
+      <p id="maintenance-start-error" class="form-error" role="alert"></p>
+    </form>
+  </details>
+
+  {{if .ActiveMaintenance}}
+  <section aria-labelledby="active-maintenance-title">
+    <h2 id="active-maintenance-title" class="section-title">Maintenance in progress</h2>
+    <div class="request-list">
+      {{range .ActiveMaintenance}}
+      <article class="request-card" id="active-maintenance-{{.ID}}">
+        <span class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8 6.2 21l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+        </span>
+        <div class="request-body">
+          <strong>{{.UserName}}</strong>
+          <span class="request-line">Doing maintenance work</span>
+        </div>
+        <div class="request-actions">
+          <button type="button" class="button-primary" hx-post="/admin/maintenance/{{.ID}}/finish" hx-swap="none" hx-select="unset"
+            hx-confirm="Gun requests open up again."
+            data-confirm-title="Finish maintenance for {{.UserName}}?" data-confirm-label="Finish">Finish</button>
+        </div>
+      </article>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
 
   {{if .Maintenance}}
   <section aria-labelledby="maintenance-title">

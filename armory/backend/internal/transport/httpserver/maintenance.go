@@ -247,3 +247,46 @@ func (s *Server) approveMaintenance(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Refresh", "true")
 }
+
+func (s *Server) startMaintenanceForUser(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.session(r)
+	if !ok || !sess.IsAdmin() {
+		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
+	if err != nil {
+		formErrorAt(w, errors.New("choose who is doing the maintenance"), "#maintenance-start-error")
+		return
+	}
+	err = s.maintain.StartForUser(r.Context(), sess.UserID, id)
+	if errors.Is(err, services.ErrUserNotFound) || errors.Is(err, services.ErrNotRequester) ||
+		errors.Is(err, services.ErrMaintenanceOpen) {
+		formErrorAt(w, err, "#maintenance-start-error")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) finishMaintenanceByAdmin(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.session(r)
+	if !ok || !sess.IsAdmin() {
+		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	err = s.maintain.FinishByID(r.Context(), sess.UserID, id)
+	if err != nil && !errors.Is(err, services.ErrMaintenanceNotFound) {
+		serverError(w, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+}

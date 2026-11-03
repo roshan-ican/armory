@@ -61,6 +61,60 @@ func (s *MaintenanceService) Assign(ctx context.Context, adminID, userID int64) 
 	return nil
 }
 
+func (s *MaintenanceService) StartForUser(ctx context.Context, adminID, userID int64) error {
+	if err := s.requireAdmin(ctx, adminID); err != nil {
+		return err
+	}
+	u, err := s.store.GetUser(ctx, userID)
+	if errors.Is(err, database.ErrNotFound) {
+		return ErrUserNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if u.Role != "requester" {
+		return ErrNotRequester
+	}
+	_, err = s.store.StartMaintainceByAdmin(ctx, userID, adminID)
+	switch {
+	case errors.Is(err, database.ErrDuplicate):
+		return ErrMaintenanceOpen
+	case errors.Is(err, database.ErrNotFound):
+		return ErrUserNotFound
+	case errors.Is(err, database.ErrConflict):
+		return ErrNotRequester
+	case err != nil:
+		return err
+	}
+	if err := s.hw.OpenDoor(ctx); err != nil {
+		log.Printf("maintenance: open door for user %d: %v", userID, err)
+	}
+	log.Printf("maintenance: %s started by admin %d, no tablet", u.Name, adminID)
+	s.hub.Publish()
+	return nil
+}
+
+func (s *MaintenanceService) FinishByID(ctx context.Context, adminID, jobID int64) error {
+	if err := s.requireAdmin(ctx, adminID); err != nil {
+		return err
+	}
+	err := s.store.FinishMaintenanceByID(ctx, jobID)
+	if errors.Is(err, database.ErrNotFound) {
+		return ErrMaintenanceNotFound
+	}
+	if err != nil {
+		return err
+	}
+	log.Printf("maintenance: job %d finished by admin %d", jobID, adminID)
+	s.hub.Say(MaintenanceDoneMessage())
+	s.hub.Publish()
+	return nil
+}
+
+func (s *MaintenanceService) Active(ctx context.Context) ([]models.MaintenanceJob, error) {
+	return s.store.ListActiveMaintenance(ctx)
+}
+
 func (s *MaintenanceService) Request(ctx context.Context, userID int64, changes []models.MaintenanceChange) (models.MaintenanceJob, error) {
 	lockers, err := s.store.ListLockers(ctx)
 	if err != nil {

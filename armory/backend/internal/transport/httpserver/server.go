@@ -89,6 +89,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/users/{id}/maintenance", s.adminOnly(s.assignMaintenance))
 	mux.HandleFunc("POST /admin/maintenance/{id}/approve", s.adminOnly(s.approveMaintenance))
 	mux.HandleFunc("POST /admin/maintenance/{id}/cancel", s.adminOnly(s.cancelMaintenance))
+	mux.HandleFunc("POST /admin/maintenance/start", s.adminOnly(s.startMaintenanceForUser))
+	mux.HandleFunc("POST /admin/maintenance/{id}/finish", s.adminOnly(s.finishMaintenanceByAdmin))
 	mux.HandleFunc("POST /admin/enrollments/{id}/approve", s.adminOnly(s.decideEnrollment(true)))
 	mux.HandleFunc("POST /admin/enrollments/{id}/reject", s.adminOnly(s.decideEnrollment(false)))
 	mux.HandleFunc("GET /admin/requests", s.adminOnly(s.requestsPage))

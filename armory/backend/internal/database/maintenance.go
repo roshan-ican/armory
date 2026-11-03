@@ -52,6 +52,79 @@ func (s *Store) AssignMaintenance(ctx context.Context, userID, adminID int64) (m
 	return models.MaintenanceJob{ID: id, UserID: userID, Status: models.MaintenanceAssigned}, nil
 }
 
+func (s *Store) StartMaintainceByAdmin(ctx context.Context, userId, adminId int64) (models.MaintenanceJob, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	defer tx.Rollback()
+
+	var role string
+	err = tx.QueryRowContext(ctx, "SELECT role FROM users WHERE id = ? AND active = 1", userId).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return models.MaintenanceJob{}, ErrNotFound
+	}
+	if err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	if role != "requester" {
+		return models.MaintenanceJob{}, ErrConflict
+	}
+
+	ts := now()
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO maintenance_jobs (user_id, status, assigned_by, started_at, created_at) VALUES (?, 'active', ?, ?, ?)",
+		userId, adminId, ts, ts)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return models.MaintenanceJob{}, ErrDuplicate
+		}
+		return models.MaintenanceJob{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO maintenance_snapshots (job_id, locker_id, capacity, guns_present)
+		SELECT ?, l.id, l.capacity,
+			(SELECT COUNT(*) FROM slots s WHERE s.locker_id = l.id AND s.active = 1 AND s.reading = 1)
+		FROM lockers l`, id); err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	if err := logMaintenance(ctx, tx, "maintenance_started", userId, "started by an admin, no tablet"); err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	return models.MaintenanceJob{ID: id, UserID: userId, Status: models.MaintenanceActive}, nil
+}
+
+func (s *Store) FinishMaintenanceByID(ctx context.Context, id int64) error {
+	return s.endMaintenance(ctx, "id = ? AND status = 'active'", id,
+		models.MaintenanceFinished, "maintenance_finished", "marked finished by an admin")
+}
+
+func (s *Store) ListActiveMaintenance(ctx context.Context) ([]models.MaintenanceJob, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT m.id, m.user_id, u.name, m.status FROM maintenance_jobs m
+		 JOIN users u ON u.id = m.user_id
+		 WHERE m.status = 'active' ORDER BY m.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []models.MaintenanceJob
+	for rows.Next() {
+		var j models.MaintenanceJob
+		if err := rows.Scan(&j.ID, &j.UserID, &j.UserName, &j.Status); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, rows.Err()
+}
 func (s *Store) RequestMaintenance(ctx context.Context, userID int64, changes []models.MaintenanceChange) (models.MaintenanceJob, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
