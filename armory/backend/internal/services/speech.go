@@ -45,6 +45,45 @@ func WrongPickMessage(picked int64, expected []int64) string {
 		picked, noun, slotWords(expected))
 }
 
+func personOrSomeone(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "Someone"
+	}
+	return strings.TrimSpace(name)
+}
+
+func AdminWrongPickMessage(name string, picked int64, expected []int64) string {
+	who := personOrSomeone(name)
+	if len(expected) == 0 {
+		return fmt.Sprintf("%s has taken an extra gun. Gun %d was not requested.", who, picked)
+	}
+	return fmt.Sprintf("%s has picked a wrong gun. Gun %d was picked instead of %s.", who, picked, slotWords(expected))
+}
+
+func AdminCorrectPickMessage(name string, picked int64, last bool) string {
+	text := fmt.Sprintf("%s has picked the right gun. Gun %d.", personOrSomeone(name), picked)
+	if last {
+		text += " All requested guns are collected."
+	}
+	return text
+}
+
+func AdminReturnedMessage(name string, returned int64, last bool) string {
+	who := personOrSomeone(name)
+	if last {
+		return fmt.Sprintf("%s has returned gun %d. All guns are back.", who, returned)
+	}
+	return fmt.Sprintf("%s has returned gun %d.", who, returned)
+}
+
+func AdminTakenAfterReturnMessage(name string, picked int64) string {
+	return fmt.Sprintf("%s has taken gun %d after the request was already complete.", personOrSomeone(name), picked)
+}
+
+func AdminUnauthorizedTakeMessage(picked int64) string {
+	return fmt.Sprintf("Gun %d was taken without an approved request.", picked)
+}
+
 func Greeting(at time.Time) string {
 	switch hour := at.Hour(); {
 	case hour < 12:

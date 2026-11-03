@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"armory/internal/live"
 	"armory/internal/models"
 )
 
@@ -24,6 +25,168 @@ func TestWrongPickMessage(t *testing.T) {
 		if got := WrongPickMessage(c.picked, c.expected); got != c.want {
 			t.Errorf("got %q, want %q", got, c.want)
 		}
+	}
+}
+
+func TestAdminWrongPickMessage(t *testing.T) {
+	cases := []struct {
+		name     string
+		picked   int64
+		expected []int64
+		want     string
+	}{
+		{"Roshan", 3, []int64{2}, "Roshan has picked a wrong gun. Gun 3 was picked instead of 2."},
+		{"Roshan", 4, []int64{1, 2}, "Roshan has picked a wrong gun. Gun 4 was picked instead of 1 and 2."},
+		{"Roshan", 2, nil, "Roshan has taken an extra gun. Gun 2 was not requested."},
+		{"", 3, []int64{2}, "Someone has picked a wrong gun. Gun 3 was picked instead of 2."},
+	}
+	for _, c := range cases {
+		if got := AdminWrongPickMessage(c.name, c.picked, c.expected); got != c.want {
+			t.Errorf("got %q, want %q", got, c.want)
+		}
+	}
+}
+
+func TestAdminTakeMessages(t *testing.T) {
+	if got, want := AdminTakenAfterReturnMessage("Roshan", 2), "Roshan has taken gun 2 after the request was already complete."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := AdminUnauthorizedTakeMessage(2), "Gun 2 was taken without an approved request."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestWrongPickAlertsTheAdmin(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
+		t.Fatal(err)
+	}
+	alerts, cancel := f.hub.SubscribeAlerts()
+	defer cancel()
+	_, take := spokenFlow(t, f)
+
+	take(f.locker.Slots[2].ID)
+
+	select {
+	case alert := <-alerts:
+		if want := "Roshan Sahani has picked a wrong gun. Gun 3 was picked instead of 1."; alert.Text != want || !alert.Urgent {
+			t.Fatalf("admin heard %+v, want urgent %q", alert, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("admin was not alerted to the wrong pick")
+	}
+}
+
+func TestAdminCorrectPickMessage(t *testing.T) {
+	if got, want := AdminCorrectPickMessage("Roshan", 1, false), "Roshan has picked the right gun. Gun 1."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	want := "Roshan has picked the right gun. Gun 3. All requested guns are collected."
+	if got := AdminCorrectPickMessage("Roshan", 3, true); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := AdminCorrectPickMessage("", 1, false), "Someone has picked the right gun. Gun 1."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestAdminReturnedMessage(t *testing.T) {
+	if got, want := AdminReturnedMessage("Roshan", 1, false), "Roshan has returned gun 1."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := AdminReturnedMessage("Roshan", 3, true), "Roshan has returned gun 3. All guns are back."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := AdminReturnedMessage("", 1, false), "Someone has returned gun 1."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestReturningGunsNoticesTheAdminByName(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.CreateForLocker(ctx, f.user.ID, f.locker.ID, []int64{1, 3}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
+		t.Fatal(err)
+	}
+	next, take := spokenFlow(t, f)
+	take(f.locker.Slots[0].ID)
+	next()
+	take(f.locker.Slots[2].ID)
+	next()
+	time.Sleep(50 * time.Millisecond)
+
+	alerts, cancel := f.hub.SubscribeAlerts()
+	defer cancel()
+	put := func(slotID int64) {
+		if err := f.store.RecordSensorEvent(ctx, slotID, 1, "gun_returned"); err != nil {
+			t.Fatal(err)
+		}
+		f.svc.SlotChanged(ctx, slotID, 1)
+	}
+	told := func() live.AdminAlert {
+		select {
+		case alert := <-alerts:
+			return alert
+		case <-time.After(time.Second):
+			t.Fatal("admin was told nothing")
+			return live.AdminAlert{}
+		}
+	}
+
+	put(f.locker.Slots[0].ID)
+	if got, want := told(), (live.AdminAlert{Text: "Roshan Sahani has returned gun 1."}); got != want {
+		t.Fatalf("first return told admin %+v, want %+v", got, want)
+	}
+
+	put(f.locker.Slots[2].ID)
+	want := live.AdminAlert{Text: "Roshan Sahani has returned gun 3. All guns are back."}
+	if got := told(); got != want {
+		t.Fatalf("last return told admin %+v, want %+v", got, want)
+	}
+}
+
+func TestCorrectPickNoticesTheAdmin(t *testing.T) {
+	ctx := context.Background()
+	f := newFlow(t)
+	req, err := f.svc.CreateForLocker(ctx, f.user.ID, f.locker.ID, []int64{1, 3}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Approve(ctx, f.admin.ID, req.ID); err != nil {
+		t.Fatal(err)
+	}
+	alerts, cancel := f.hub.SubscribeAlerts()
+	defer cancel()
+	_, take := spokenFlow(t, f)
+
+	next := func() live.AdminAlert {
+		select {
+		case alert := <-alerts:
+			return alert
+		case <-time.After(time.Second):
+			t.Fatal("admin was told nothing")
+			return live.AdminAlert{}
+		}
+	}
+
+	take(f.locker.Slots[0].ID)
+	if got, want := next(), (live.AdminAlert{Text: "Roshan Sahani has picked the right gun. Gun 1."}); got != want {
+		t.Fatalf("first gun told admin %+v, want %+v", got, want)
+	}
+
+	take(f.locker.Slots[2].ID)
+	want := live.AdminAlert{Text: "Roshan Sahani has picked the right gun. Gun 3. All requested guns are collected."}
+	if got := next(); got != want {
+		t.Fatalf("last gun told admin %+v, want %+v", got, want)
 	}
 }
 

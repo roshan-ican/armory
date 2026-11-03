@@ -18,6 +18,7 @@
       <a href="/admin/users" {{if eq .Title "People"}}class="active" aria-current="page"{{end}}>People<span id="ppl-badge" class="badge" hx-get="/admin/users/badge" hx-trigger="load, armory:changed from:body" hx-swap="innerHTML" hx-select="unset"></span></a>
     </nav>
     <button id="notify-btn" class="notify-btn" type="button" hidden>Enable alerts</button>
+    <button id="voice-btn" class="notify-btn" type="button" aria-pressed="true">Voice on</button>
     <a class="kiosk-link" href="/admin/logout">Sign out</a>
     <span class="system-status"><i></i><span class="when-online">Live</span><span class="when-offline">Reconnecting…</span></span>
   </header>
@@ -115,6 +116,36 @@
           });
         } catch (e) {}
       };
+      const voiceBtn = document.getElementById("voice-btn");
+      const voiceOn = () => {
+        try {
+          return localStorage.getItem("armory-voice") !== "0";
+        } catch (error) {
+          return true;
+        }
+      };
+      const syncVoiceBtn = () => {
+        const on = voiceOn();
+        voiceBtn.textContent = on ? "Voice on" : "Voice off";
+        voiceBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      };
+      const speak = (text) => {
+        if (!voiceOn() || !("speechSynthesis" in window)) return;
+        try {
+          speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = "en-US";
+          setTimeout(() => speechSynthesis.speak(utterance), 400);
+        } catch (error) {}
+      };
+      voiceBtn.addEventListener("click", () => {
+        try {
+          localStorage.setItem("armory-voice", voiceOn() ? "0" : "1");
+        } catch (error) {}
+        syncVoiceBtn();
+        speak("Voice alerts on");
+      });
+      syncVoiceBtn();
       const toast = document.getElementById("toast");
       let toastTimer = null;
       const notifyBtn = document.getElementById("notify-btn");
@@ -152,7 +183,7 @@
         }
       };
       const toastLink = toast.querySelector("a");
-      const announce = (text, url) => {
+      const announce = (text, url, urgent) => {
         if (document.hidden) systemNotify(text, url);
         document.getElementById("toast-text").textContent = text;
         toastLink.href = url;
@@ -161,9 +192,11 @@
         void toast.offsetWidth;
         toast.classList.add("is-in");
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => (toast.hidden = true), 8000);
+        if (!urgent) toastTimer = setTimeout(() => (toast.hidden = true), 8000);
         chime();
+        speak(text);
       };
+      toast.addEventListener("click", () => (toast.hidden = true));
       const watched = {
         "req-badge": { url: "/admin/requests", one: "New request waiting", many: " requests waiting" },
         "ppl-badge": { url: "/admin/users", one: "New enrollment request", many: " enrollment requests waiting" },
@@ -182,8 +215,10 @@
       let events = null;
       const connect = () => {
         if (events) return;
-        events = new EventSource("/events");
+        events = new EventSource("/events?alerts=1");
         events.onmessage = refresh;
+        events.addEventListener("alert", (e) => announce(e.data, "/admin/requests", true));
+        events.addEventListener("notice", (e) => announce(e.data, "/admin/requests", false));
         events.onopen = () => {
           status.classList.remove("offline");
           if (opened) refresh();

@@ -91,7 +91,7 @@ class Api(private val baseUrl: String) {
                 val slots = l.optJSONArray("slots") ?: JSONArray()
                 MaintLocker(
                     l.getLong("id"), l.getString("name"), l.optString("kind"), l.optInt("capacity"),
-                    List(slots.length()) { i -> slots.getJSONObject(i).let { s -> SlotReading(s.getInt("no"), s.optInt("reading", -1)) } },
+                    List(slots.length()) { i -> slots.getJSONObject(i).let { s -> SlotReading(s.getInt("no"), s.optInt("reading", -1), s.optBoolean("disabled")) } },
                 )
             },
         )

@@ -293,7 +293,7 @@ private fun MaintenanceStep(model: KioskViewModel, state: UiState) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(locker.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            locker.slots.forEach { Box(Modifier.size(14.dp).clip(CircleShape).background(readingTone(it.reading))) }
+                            locker.slots.forEach { Box(Modifier.size(14.dp).clip(CircleShape).background(if (it.disabled) Palette.Grey else readingTone(it.reading))) }
                         }
                     }
                     Chip("Unlock") { model.unlockLocker(locker.id) }

@@ -14,7 +14,7 @@ data class Locker(
 
 data class Chosen(val no: Int, val status: String)
 
-data class SlotReading(val no: Int, val reading: Int)
+data class SlotReading(val no: Int, val reading: Int, val disabled: Boolean = false)
 
 data class GunRequest(
     val id: Long,

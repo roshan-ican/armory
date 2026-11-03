@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"armory/internal/live"
 )
 
 const heartbeat = 25 * time.Second
@@ -30,6 +32,13 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		speech = ch
 	}
 
+	var alerts <-chan live.AdminAlert
+	if r.URL.Query().Get("alerts") == "1" {
+		ch, cancelAlerts := s.hub.SubscribeAlerts()
+		defer cancelAlerts()
+		alerts = ch
+	}
+
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
@@ -44,6 +53,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, "data: changed\n\n")
 		case text := <-speech:
 			fmt.Fprintf(w, "event: say\ndata: %s\n\n", strings.ReplaceAll(text, "\n", " "))
+		case alert := <-alerts:
+			kind := "notice"
+			if alert.Urgent {
+				kind = "alert"
+			}
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", kind, strings.ReplaceAll(alert.Text, "\n", " "))
 		case <-ticker.C:
 			fmt.Fprint(w, ": ping\n\n")
 		}

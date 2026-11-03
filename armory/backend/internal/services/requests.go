@@ -496,7 +496,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 		if id != 0 {
 			log.Printf("request %d: slot %d emptied, a chosen gun was taken (all taken: %t)", id, slotID, done)
 			s.signalSlot(ctx, slotID, SignalCorrect)
-			s.announceCorrect(ctx, slotID, done)
+			s.announceCorrect(ctx, id, slotID, done)
 			s.hub.Publish()
 			return
 		}
@@ -514,7 +514,9 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 			log.Printf("record wrong gun slot %d: %v", slotID, err)
 			return
 		}
-		s.hub.Say(WrongPickMessage(info.SlotNo, pendingSlotNumbers(approved.Slots)))
+		pending := pendingSlotNumbers(approved.Slots)
+		s.hub.Say(WrongPickMessage(info.SlotNo, pending))
+		s.hub.Alert(AdminWrongPickMessage(approved.UserName, info.SlotNo, pending))
 		s.hub.Publish()
 	case 1:
 		id, done, err := s.store.MarkReturned(ctx, slotID)
@@ -527,6 +529,7 @@ func (s *RequestService) handleSlot(ctx context.Context, slotID int64, reading b
 			if done {
 				s.hub.Say(ReturnedMessage())
 			}
+			s.announceReturned(ctx, id, slotID, done)
 			s.hub.Publish()
 		}
 	}
@@ -543,6 +546,7 @@ func (s *RequestService) flagLooseTake(ctx context.Context, slotID int64, info d
 		}
 		log.Printf("request %d: locker %d slot %d emptied after the request was returned", returned.ID, info.LockerID, info.SlotNo)
 		s.hub.Say(TakenAfterReturnMessage(info.SlotNo))
+		s.hub.Alert(AdminTakenAfterReturnMessage(returned.UserName, info.SlotNo))
 		s.hub.Publish()
 		return
 	}
@@ -552,15 +556,33 @@ func (s *RequestService) flagLooseTake(ctx context.Context, slotID int64, info d
 	}
 	log.Printf("locker %d slot %d: gun left with no approved request", info.LockerID, info.SlotNo)
 	s.hub.Say(UnauthorizedTakeMessage(info.SlotNo))
+	s.hub.Alert(AdminUnauthorizedTakeMessage(info.SlotNo))
 	s.hub.Publish()
 }
 
-func (s *RequestService) announceCorrect(ctx context.Context, slotID int64, last bool) {
+func (s *RequestService) announceCorrect(ctx context.Context, requestID, slotID int64, last bool) {
 	info, err := s.store.GetSlotInfo(ctx, slotID)
 	if err != nil {
 		return
 	}
 	s.hub.Say(CorrectPickMessage(info.SlotNo, last))
+	s.hub.Notice(AdminCorrectPickMessage(s.requesterName(ctx, requestID), info.SlotNo, last))
+}
+
+func (s *RequestService) announceReturned(ctx context.Context, requestID, slotID int64, last bool) {
+	info, err := s.store.GetSlotInfo(ctx, slotID)
+	if err != nil {
+		return
+	}
+	s.hub.Notice(AdminReturnedMessage(s.requesterName(ctx, requestID), info.SlotNo, last))
+}
+
+func (s *RequestService) requesterName(ctx context.Context, requestID int64) string {
+	req, err := s.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return ""
+	}
+	return req.UserName
 }
 
 func (s *RequestService) signalSlot(ctx context.Context, slotID int64, signal Signal) {

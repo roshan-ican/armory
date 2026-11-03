@@ -12,8 +12,9 @@ import (
 )
 
 type slotJSON struct {
-	No      int64 `json:"no"`
-	Reading int64 `json:"reading"`
+	No       int64 `json:"no"`
+	Reading  int64 `json:"reading"`
+	Disabled bool  `json:"disabled,omitempty"`
 }
 
 type chosenJSON struct {

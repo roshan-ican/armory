@@ -3,16 +3,23 @@ package live
 import "sync"
 
 // Hub tells every subscriber that something changed; subscribers re-fetch what they show.
+type AdminAlert struct {
+	Text   string
+	Urgent bool
+}
+
 type Hub struct {
 	mu     sync.Mutex
 	subs   map[chan struct{}]struct{}
 	speech map[chan string]struct{}
+	alerts map[chan AdminAlert]struct{}
 }
 
 func NewHub() *Hub {
 	return &Hub{
 		subs:   make(map[chan struct{}]struct{}),
 		speech: make(map[chan string]struct{}),
+		alerts: make(map[chan AdminAlert]struct{}),
 	}
 }
 
@@ -65,6 +72,41 @@ func (h *Hub) Say(text string) {
 	for ch := range h.speech {
 		select {
 		case ch <- text:
+		default:
+		}
+	}
+}
+
+func (h *Hub) SubscribeAlerts() (<-chan AdminAlert, func()) {
+	ch := make(chan AdminAlert, 4)
+	h.mu.Lock()
+	h.alerts[ch] = struct{}{}
+	h.mu.Unlock()
+
+	return ch, func() {
+		h.mu.Lock()
+		delete(h.alerts, ch)
+		h.mu.Unlock()
+	}
+}
+
+func (h *Hub) Alert(text string) {
+	h.tell(AdminAlert{Text: text, Urgent: true})
+}
+
+func (h *Hub) Notice(text string) {
+	h.tell(AdminAlert{Text: text})
+}
+
+func (h *Hub) tell(alert AdminAlert) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.alerts {
+		select {
+		case ch <- alert:
 		default:
 		}
 	}

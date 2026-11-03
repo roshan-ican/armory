@@ -147,7 +147,7 @@ func (s *Server) apiMaintenance(w http.ResponseWriter, r *http.Request, sess ser
 	for _, l := range lockers {
 		item := maintenanceLockerJSON{ID: l.ID, Name: l.Name, Kind: l.Kind, Capacity: l.Capacity, Slots: []slotJSON{}}
 		for _, sl := range l.Slots {
-			item.Slots = append(item.Slots, slotJSON{No: sl.SlotNo, Reading: sl.Reading})
+			item.Slots = append(item.Slots, slotJSON{No: sl.SlotNo, Reading: sl.Reading, Disabled: sl.SensorDisabled})
 		}
 		list = append(list, item)
 	}
