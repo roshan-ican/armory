@@ -4,7 +4,7 @@
     <h1>Lockers</h1>
     <p>Every gun in the armory, live.</p>
   </div>
-  <span class="record-count">{{len .Lockers}} lockers</span>
+  <span class="record-count">{{len .Lockers}} {{if eq (len .Lockers) 1}}locker{{else}}lockers{{end}}</span>
 </div>
 <details class="panel add-locker">
   <summary>New locker</summary>

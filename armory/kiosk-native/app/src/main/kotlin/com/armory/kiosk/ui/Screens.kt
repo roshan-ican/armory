@@ -126,7 +126,10 @@ private fun TopBar(context: String, name: String?, connected: Boolean) {
         }
         Text(context, color = Palette.Muted, fontSize = 13.sp)
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            if (name != null) Text(name, color = Color(0xFFD4D4D8), fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (name != null) Text(name, color = Palette.Sub, fontSize = 14.sp)
+                ThemeToggle()
+            }
         }
     }
 }
@@ -155,7 +158,7 @@ private fun Screen(content: @Composable () -> Unit) {
 private fun ErrorLine(text: String) {
     if (text.isNotEmpty()) {
         Text(
-            text, color = Color(0xFFFF918A), textAlign = TextAlign.Center,
+            text, color = Palette.DangerText, textAlign = TextAlign.Center,
             modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Color(0x1FFF453A)).padding(horizontal = 16.dp, vertical = 12.dp),
         )
     }
@@ -292,14 +295,14 @@ private fun MaintenanceStep(model: KioskViewModel, state: UiState) {
             Card(Modifier.width(520.dp)) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(locker.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                        Text(locker.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             locker.slots.forEach { Box(Modifier.size(14.dp).clip(CircleShape).background(if (it.disabled) Palette.Grey else readingTone(it.reading))) }
                         }
                     }
                     Chip("Unlock") { model.unlockLocker(locker.id) }
                     Chip("−", enabled = locker.capacity > 1 && !state.busy) { model.changeCapacity(locker.id, locker.capacity - 1) }
-                    Text("${locker.capacity}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Text("${locker.capacity}", color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                     Chip("+", enabled = locker.capacity < 5 && !state.busy) { model.changeCapacity(locker.id, locker.capacity + 1) }
                 }
             }
@@ -339,7 +342,7 @@ private fun CatalogStep(model: KioskViewModel, state: UiState) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Column(Modifier.weight(1f)) {
-                                Text(locker.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                                Text(locker.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                                 Text(locker.location.ifEmpty { locker.kind }, color = Palette.Muted, fontSize = 13.sp)
                             }
                             StatePill(locker.online)
@@ -354,7 +357,7 @@ private fun CatalogStep(model: KioskViewModel, state: UiState) {
                                     GunIcon(locker.kind, toneOf(locker, slot), if (locker.kind == "pistol") 76 else 140)
                                     Text("${slot.no}", color = Palette.Muted, fontSize = 11.sp)
                                     if (slot.takenBy.isNotEmpty()) {
-                                        Text("Taken by ${slot.takenBy}", color = Color(0xFFFF918A), fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
+                                        Text("Taken by ${slot.takenBy}", color = Palette.DangerText, fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
                                     } else if (slot.requestedBy.isNotEmpty()) {
                                         Text("Requested by ${slot.requestedBy}", color = Palette.Green, fontSize = 11.sp, maxLines = 2, textAlign = TextAlign.Center)
                                     }                                }
@@ -450,7 +453,7 @@ private fun GunsBar(model: KioskViewModel, state: UiState) {
 private fun SummaryRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Palette.Muted)
-        Text(value, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text(value, color = Palette.Text, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -485,10 +488,10 @@ private fun ReviewStep(model: KioskViewModel, state: UiState) {
 
 @Composable
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
+    focusedTextColor = Palette.Text,
+    unfocusedTextColor = Palette.Text,
     focusedBorderColor = Palette.Blue,
-    unfocusedBorderColor = Color(0x22FFFFFF),
+    unfocusedBorderColor = Palette.FieldLine,
     focusedLabelColor = Palette.BlueSoft,
     unfocusedLabelColor = Palette.Muted,
     cursorColor = Palette.Blue,
@@ -514,7 +517,7 @@ private fun WaitingStep(model: KioskViewModel, state: UiState) {
             Modifier.width(320.dp).clip(RoundedCornerShape(16.dp)).background(Palette.Surface).padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(state.selected?.name ?: r?.lockerName.orEmpty(), color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(state.selected?.name ?: r?.lockerName.orEmpty(), color = Palette.Text, fontWeight = FontWeight.SemiBold)
             Text(if (nos.isNotEmpty()) "${if (nos.size > 1) "Guns" else "Gun"} ${nos.joinToString(", ")}" else r?.kind.orEmpty(), color = Palette.Muted)
         }
         QuietButton("Cancel request", danger = true) { model.cancelRequest() }
@@ -546,13 +549,13 @@ private fun OpenStep(state: UiState, wrong: Boolean) {
                     bad -> Palette.Red
                     done -> Palette.Green
                     target -> Palette.Blue
-                    else -> Color(0x14FFFFFF)
+                    else -> Palette.Ghost
                 }
                 Box(
-                    Modifier.size(64.dp, 92.dp).clip(RoundedCornerShape(15.dp)).background(line.copy(alpha = if (line == Color(0x14FFFFFF)) 1f else 0.18f))
+                    Modifier.size(64.dp, 92.dp).clip(RoundedCornerShape(15.dp)).background(line.copy(alpha = if (line == Palette.Ghost) 1f else 0.18f))
                         .border(2.dp, line, RoundedCornerShape(15.dp)),
                     contentAlignment = Alignment.BottomCenter,
-                ) { Text("${slot.no}", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(10.dp)) }
+                ) { Text("${slot.no}", color = Palette.Text, fontWeight = FontWeight.Bold, modifier = Modifier.padding(10.dp)) }
             }
         }
     }
@@ -636,6 +639,10 @@ private fun EnrollFaceStep(model: KioskViewModel, state: UiState, granted: Boole
                 if (state.busy) "Sending…" else scanMessage(state.scan, "", state.modelMissing),
                 color = Palette.Muted, fontSize = 18.sp, textAlign = TextAlign.Center,
             )
+            if ((state.scan as? ScanState.Guide)?.swap == true && !state.busy) {
+                PrimaryButton("Continue  →", onClick = model::continueLook)
+                SecondaryButton("I don't wear glasses", model::skipLook)
+            }
             ErrorLine(state.error)
             Spacer(Modifier.height(4.dp))
         }

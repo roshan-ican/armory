@@ -28,8 +28,6 @@ import androidx.compose.ui.unit.sp
 import com.armory.kiosk.data.Locker
 import com.armory.kiosk.data.Slot
 
-private val PanelColor = Color(0xFF34373A)
-private val PlateColor = Color(0xFFD6D6D2)
 private const val COLUMNS = 4
 
 @Composable
@@ -42,10 +40,10 @@ fun GunRack(
     iconHeight: Int = 54,
     panelHeight: Int? = null,
 ) {
-    val dot = Color(0x24000000)
+    val dot = Palette.RackDot
     var panel = modifier
         .clip(RoundedCornerShape(14.dp))
-        .background(PanelColor)
+        .background(Palette.Rack)
         .drawBehind {
             val step = 14.dp.toPx()
             var y = step / 2
@@ -97,23 +95,23 @@ private fun RackCell(locker: Locker, slot: Slot, picked: Boolean, iconHeight: In
         }
         Box(
             Modifier.padding(top = 2.dp).width(40.dp).height(8.dp).clip(RoundedCornerShape(3.dp))
-                .background(PlateColor).alpha(if (dim) 0.55f else 1f),
+                .background(Palette.Plate).alpha(if (dim) 0.55f else 1f),
         )
         Text(
             "${slot.no}",
-            color = Color(0xFFE6E6E3),
+            color = Palette.RackLabel,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 3.dp),
         )
         if (slot.takenBy.isNotEmpty()) {
             Text(
-                "Taken by ${slot.takenBy}", color = Color(0xFFFF918A), fontSize = 10.sp, maxLines = 2,
+                "Taken by ${slot.takenBy}", color = Palette.DangerText, fontSize = 10.sp, maxLines = 2,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
         } else if (slot.requestedBy.isNotEmpty()) {
             Text(
-                "Requested by ${slot.requestedBy}", color = Color(0xFF30D158), fontSize = 10.sp, maxLines = 2,
+                "Requested by ${slot.requestedBy}", color = Palette.Green, fontSize = 10.sp, maxLines = 2,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
         }    }

@@ -17,6 +17,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.armory.kiosk.ui.KioskApp
 import com.armory.kiosk.ui.KioskViewModel
+import com.armory.kiosk.ui.Palette
 import com.armory.kiosk.ui.preloadGunArt
 
 class MainActivity : ComponentActivity() {
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             hide(WindowInsetsCompat.Type.systemBars())
         }
+        Palette.load(applicationContext)
         preloadGunArt(applicationContext)
         granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         if (!granted) permission.launch(Manifest.permission.CAMERA)
