@@ -49,6 +49,7 @@ class VerifyScanner(
     @Volatile
     private var stage = Stage.COLLECT
     private var challenge: Challenge? = null
+    private val pending = ArrayDeque<ChallengeKind>()
     private var identity: FloatArray? = null
     private var who = ""
     private var passedAt = 0L
@@ -58,6 +59,7 @@ class VerifyScanner(
     fun restart() {
         stage = Stage.COLLECT
         challenge = null
+        pending.clear()
         identity = null
         who = ""
         passedAt = 0
@@ -69,6 +71,8 @@ class VerifyScanner(
     fun identified(name: String) {
         who = name
         challenge = null
+        pending.clear()
+        pending.addAll(Challenge.sequence())
         stage = Stage.CHALLENGE
     }
 
@@ -121,12 +125,17 @@ class VerifyScanner(
     private fun runChallenge(signal: FaceSignal) {
         var active = challenge
         if (active == null) {
-            active = Challenge.any()
+            if (pending.isEmpty()) pending.addAll(Challenge.sequence())
+            active = Challenge(pending.removeFirst())
             challenge = active
         }
         publish(ScanState.Prompt(active.kind, who))
         when (active.update(signal)) {
             Progress.PASSED -> {
+                if (pending.isNotEmpty()) {
+                    challenge = null
+                    return
+                }
                 passedAt = System.currentTimeMillis()
                 stage = Stage.CONFIRM
                 publish(ScanState.Checking)

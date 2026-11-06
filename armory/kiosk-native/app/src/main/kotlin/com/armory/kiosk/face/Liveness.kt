@@ -7,6 +7,8 @@ enum class ChallengeKind(val prompt: String) {
     TURN("Turn your head to either side, then look back"),
     SMILE("Give a smile"),
     ANY("Blink, smile or turn your head"),
+    TURN_LEFT("Turn your head to your left, then look back"),
+    TURN_RIGHT("Turn your head to your right, then look back"),
 }
 
 data class FaceSignal(
@@ -41,6 +43,7 @@ data class FaceSignal(
         const val FRONTAL_PITCH = 15f
         const val TURNED_YAW = 18f
         const val MIN_WIDTH = 0.28f
+        const val LEFT_YAW_SIGN = 1f
     }
 }
 
@@ -68,6 +71,11 @@ class Challenge(
         return sawTurn && s.frontal
     }
 
+    private fun turnDoneToward(s: FaceSignal, sign: Float): Boolean {
+        if (s.yaw * sign > FaceSignal.TURNED_YAW) sawTurn = true
+        return sawTurn && s.frontal
+    }
+
     private fun smileDone(s: FaceSignal): Boolean {
         if (s.neutral) sawNeutral = true
         return sawNeutral && (s.smile ?: 0f) > FaceSignal.SMILING
@@ -80,6 +88,8 @@ class Challenge(
             ChallengeKind.TURN -> turnDone(s)
             ChallengeKind.SMILE -> smileDone(s)
             ChallengeKind.ANY -> listOf(blinkDone(s), turnDone(s), smileDone(s)).any { it }
+            ChallengeKind.TURN_LEFT -> turnDoneToward(s, FaceSignal.LEFT_YAW_SIGN)
+            ChallengeKind.TURN_RIGHT -> turnDoneToward(s, -FaceSignal.LEFT_YAW_SIGN)
         }
         return if (done) Progress.PASSED else Progress.PENDING
     }
@@ -88,5 +98,10 @@ class Challenge(
         fun random(): Challenge = Challenge(ChallengeKind.entries.filter { it != ChallengeKind.ANY }.random())
 
         fun any(): Challenge = Challenge(ChallengeKind.ANY)
+
+        private val SEQUENCE_POOL = listOf(ChallengeKind.BLINK, ChallengeKind.SMILE, ChallengeKind.TURN_LEFT, ChallengeKind.TURN_RIGHT)
+
+        fun sequence(count: Int = 2, random: kotlin.random.Random = kotlin.random.Random.Default): List<ChallengeKind> =
+            SEQUENCE_POOL.shuffled(random).take(count)
     }
 }

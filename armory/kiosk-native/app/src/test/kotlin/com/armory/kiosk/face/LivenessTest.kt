@@ -103,6 +103,41 @@ class LivenessTest {
     }
 
     @Test
+    fun turnLeftIgnoresTheOtherDirection() {
+        val c = Challenge(ChallengeKind.TURN_LEFT)
+        c.update(signal(yaw = -30f))
+        assertEquals(Progress.PENDING, c.update(signal(yaw = 0f)))
+        c.update(signal(yaw = 30f))
+        assertEquals(Progress.PASSED, c.update(signal(yaw = 0f)))
+    }
+
+    @Test
+    fun turnRightIgnoresTheOtherDirection() {
+        val c = Challenge(ChallengeKind.TURN_RIGHT)
+        c.update(signal(yaw = 30f))
+        assertEquals(Progress.PENDING, c.update(signal(yaw = 0f)))
+        c.update(signal(yaw = -30f))
+        assertEquals(Progress.PASSED, c.update(signal(yaw = 0f)))
+    }
+
+    @Test
+    fun sequenceIsTwoDistinctSpecificChallenges() {
+        repeat(200) {
+            val s = Challenge.sequence()
+            assertEquals(2, s.size)
+            assertEquals(2, s.toSet().size)
+            assertFalse(ChallengeKind.ANY in s)
+            assertFalse(ChallengeKind.TURN in s)
+        }
+    }
+
+    @Test
+    fun sequenceVariesBetweenAttempts() {
+        val seen = (1..200).map { Challenge.sequence() }.toSet()
+        assertTrue(seen.size > 6)
+    }
+
+    @Test
     fun expiresAfterTimeout() {
         var now = 1_000L
         val c = Challenge(ChallengeKind.BLINK, timeoutMs = 8000, clock = { now })
