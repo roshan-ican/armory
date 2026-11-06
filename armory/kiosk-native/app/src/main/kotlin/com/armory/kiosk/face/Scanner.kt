@@ -7,7 +7,7 @@ sealed interface ScanState {
     data class Adjust(val hint: String) : ScanState
     data class Prompt(val kind: ChallengeKind, val name: String = "") : ScanState
     data object Checking : ScanState
-    data class Guide(val prompt: String, val done: Int, val total: Int) : ScanState
+    data class Guide(val prompt: String, val done: Int, val total: Int, val swap: Boolean = false) : ScanState
     data class Captured(val done: Int, val total: Int) : ScanState
 }
 
@@ -183,6 +183,7 @@ class EnrollScanner(
     private var lastAt = 0L
     private var finished = false
 
+    @Synchronized
     fun restart() {
         taken.clear()
         plan = EnrollPlan()
@@ -192,8 +193,31 @@ class EnrollScanner(
         publish(ScanState.NoFace)
     }
 
+    @Synchronized
+    fun continueLook() {
+        if (finished || !plan.waitingForSwap) return
+        plan.skip()
+        streak = 0
+        lastAt = 0
+        publish(guide())
+    }
+
+    @Synchronized
+    fun skipLook() {
+        if (finished || !plan.waitingForSwap) return
+        plan.finishEarly()
+        finished = true
+        publish(ScanState.Captured(taken.size, plan.total))
+        onDone(taken.toList())
+    }
+
+    @Synchronized
     override fun handle(obs: Observation) {
         if (finished) return
+        if (plan.waitingForSwap) {
+            publish(guide())
+            return
+        }
         if (obs.faces.isEmpty()) {
             streak = 0
             publish(ScanState.NoFace)
@@ -233,7 +257,7 @@ class EnrollScanner(
         }
     }
 
-    private fun guide() = ScanState.Guide(plan.current.prompt, plan.done, plan.total)
+    private fun guide() = ScanState.Guide(plan.current.prompt, plan.done, plan.total, plan.waitingForSwap)
 
     companion object {
         const val GAP_MS = 900L

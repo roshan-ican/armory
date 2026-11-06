@@ -61,6 +61,47 @@ class EnrollPlanTest {
     }
 
     @Test
+    fun swapStepNeverMatchesAFrameAndSkipAdvances() {
+        val plan = EnrollPlan(listOf(Pose.STRAIGHT, Pose.SWAP_LOOK, Pose.STRAIGHT))
+        plan.skip()
+        assertEquals(Pose.STRAIGHT, plan.current)
+        assertEquals(0, plan.done)
+        plan.commit(signal())
+        assertTrue(plan.waitingForSwap)
+        assertFalse(plan.fits(signal()))
+        plan.skip()
+        assertFalse(plan.waitingForSwap)
+        assertEquals(Pose.STRAIGHT, plan.current)
+        assertTrue(plan.fits(signal()))
+    }
+
+    @Test
+    fun finishEarlyEndsThePlan() {
+        val plan = EnrollPlan()
+        plan.finishEarly()
+        assertTrue(plan.finished)
+        assertFalse(plan.fits(signal()))
+    }
+
+    @Test
+    fun secondRoundResetsTheTurnDirection() {
+        val plan = EnrollPlan(listOf(Pose.TURN_FIRST, Pose.TURN_SECOND, Pose.SWAP_LOOK, Pose.TURN_FIRST, Pose.TURN_SECOND))
+        plan.commit(signal(yaw = 15f))
+        plan.commit(signal(yaw = -15f))
+        plan.skip()
+        assertTrue(plan.fits(signal(yaw = -15f)))
+        plan.commit(signal(yaw = -15f))
+        assertFalse(plan.fits(signal(yaw = -15f)))
+        assertTrue(plan.fits(signal(yaw = 15f)))
+    }
+
+    @Test
+    fun defaultPlanHasTwoRoundsAndFitsTheServerLimit() {
+        assertEquals(1, EnrollPlan.DEFAULT.count { it == Pose.SWAP_LOOK })
+        assertTrue(EnrollPlan.DEFAULT.size - 1 <= 20)
+    }
+
+    @Test
     fun finishesAfterEveryStep() {
         val plan = EnrollPlan(listOf(Pose.STRAIGHT, Pose.FINAL))
         assertEquals(2, plan.total)

@@ -396,6 +396,14 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun continueLook() {
+        enroll?.continueLook()
+    }
+
+    fun skipLook() {
+        enroll?.skipLook()
+    }
+
     private suspend fun submitEnrollment(shots: List<FloatArray>) {
         val s = _state.value
         _state.update { it.copy(busy = true) }

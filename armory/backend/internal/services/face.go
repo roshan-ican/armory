@@ -21,6 +21,8 @@ const (
 	nativeModelName      = "mobilefacenet-tflite"
 	MatchThreshold       = 0.5
 	NativeMatchThreshold = 0.8
+	MatchMargin          = 0.05
+	NativeMatchMargin    = 0.1
 	noDistance           = math.MaxFloat64
 )
 
@@ -77,9 +79,10 @@ func (s *FaceService) enrolled(ctx context.Context) ([]cachedFace, error) {
 }
 
 type MatchResult struct {
-	Matched  bool
-	User     models.User
-	Distance float64
+	Matched   bool
+	Ambiguous bool
+	User      models.User
+	Distance  float64
 }
 
 func (s *FaceService) PendingEnrollments(ctx context.Context) ([]models.FaceEnrollmentRequest, error) {
@@ -124,6 +127,13 @@ func thresholdFor(d []float64) float64 {
 		return MatchThreshold
 	}
 	return NativeMatchThreshold
+}
+
+func marginFor(d []float64) float64 {
+	if len(d) == descriptorLen {
+		return MatchMargin
+	}
+	return NativeMatchMargin
 }
 
 func distance(a, b []float64) float64 {
@@ -203,7 +213,7 @@ func encodeDescriptors(descriptors [][]float64) ([]string, error) {
 
 func (s *FaceService) existingOwner(ctx context.Context, descriptors [][]float64) (models.User, bool, error) {
 	for _, d := range descriptors {
-		res, err := s.Match(ctx, d)
+		res, err := s.match(ctx, d, false)
 		if err != nil {
 			return models.User{}, false, err
 		}
@@ -215,6 +225,10 @@ func (s *FaceService) existingOwner(ctx context.Context, descriptors [][]float64
 }
 
 func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchResult, error) {
+	return s.match(ctx, descriptor, true)
+}
+
+func (s *FaceService) match(ctx context.Context, descriptor []float64, useMargin bool) (MatchResult, error) {
 	if !validDescriptor(descriptor) {
 		return MatchResult{}, ErrInvalidDescriptor
 	}
@@ -223,20 +237,32 @@ func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchRes
 		return MatchResult{}, err
 	}
 
-	best := noDistance
+	best, second := noDistance, noDistance
 	var bestUser models.User
 	for _, f := range faces {
 		if len(f.vec) != len(descriptor) {
 			continue
 		}
-		if d := distance(descriptor, f.vec); d < best {
+		d := distance(descriptor, f.vec)
+		switch {
+		case f.user.ID == bestUser.ID:
+			if d < best {
+				best = d
+			}
+		case d < best:
+			second = best
 			best = d
 			bestUser = f.user
+		case d < second:
+			second = d
 		}
 	}
-	log.Printf("face match: best %.3f limit %.2f user %q", best, thresholdFor(descriptor), bestUser.Name)
+	log.Printf("face match: best %.3f second %.3f limit %.2f user %q", best, second, thresholdFor(descriptor), bestUser.Name)
 	if best > thresholdFor(descriptor) {
 		return MatchResult{Distance: best}, nil
+	}
+	if useMargin && second != noDistance && second-best < marginFor(descriptor) {
+		return MatchResult{Ambiguous: true, Distance: best}, nil
 	}
 	return MatchResult{Matched: true, User: bestUser, Distance: best}, nil
 }

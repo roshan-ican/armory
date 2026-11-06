@@ -10,6 +10,7 @@ enum class Pose(val prompt: String) {
     CLOSER("Move a little closer."),
     SMILE("Give a small smile."),
     FINAL("Relax and look straight again."),
+    SWAP_LOOK("Change your glasses: take them off, or put them on."),
 }
 
 class EnrollPlan(private val steps: List<Pose> = DEFAULT) {
@@ -22,9 +23,20 @@ class EnrollPlan(private val steps: List<Pose> = DEFAULT) {
     val finished: Boolean get() = index >= steps.size
     val current: Pose get() = steps[index]
 
+    val waitingForSwap: Boolean get() = !finished && current == Pose.SWAP_LOOK
+
+    fun skip() {
+        if (waitingForSwap) index++
+    }
+
+    fun finishEarly() {
+        index = steps.size
+    }
+
     fun fits(s: FaceSignal): Boolean {
         if (finished || !s.eyesOpen || s.widthRatio < FaceSignal.MIN_WIDTH) return false
         return when (current) {
+            Pose.SWAP_LOOK -> false
             Pose.STRAIGHT, Pose.FINAL -> s.frontal
             Pose.TURN_FIRST -> abs(s.yaw) in TURN_MIN..TURN_MAX
             Pose.TURN_SECOND -> abs(s.yaw) in TURN_MIN..TURN_MAX && sign(s.yaw) != turnSign
@@ -44,7 +56,11 @@ class EnrollPlan(private val steps: List<Pose> = DEFAULT) {
     }
 
     companion object {
-        val DEFAULT = listOf(Pose.STRAIGHT, Pose.TURN_FIRST, Pose.TURN_SECOND, Pose.CLOSER, Pose.SMILE, Pose.FINAL)
+        val DEFAULT = listOf(
+            Pose.STRAIGHT, Pose.TURN_FIRST, Pose.TURN_SECOND, Pose.CLOSER, Pose.SMILE, Pose.FINAL,
+            Pose.SWAP_LOOK,
+            Pose.STRAIGHT, Pose.TURN_FIRST, Pose.TURN_SECOND, Pose.SMILE,
+        )
         const val TURN_MIN = 8f
         const val TURN_MAX = 22f
         const val CLOSER_RATIO = 1.2f

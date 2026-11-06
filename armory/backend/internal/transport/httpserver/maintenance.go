@@ -103,6 +103,7 @@ func maintenanceStatus(err error) (int, bool) {
 	case errors.Is(err, services.ErrNotRequester):
 		return http.StatusForbidden, true
 	case errors.Is(err, services.ErrMaintenanceOpen),
+		errors.Is(err, services.ErrMaintenanceBusy),
 		errors.Is(err, services.ErrMaintenanceNotFound):
 		return http.StatusConflict, true
 	}

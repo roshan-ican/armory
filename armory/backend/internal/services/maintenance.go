@@ -116,6 +116,16 @@ func (s *MaintenanceService) Active(ctx context.Context) ([]models.MaintenanceJo
 }
 
 func (s *MaintenanceService) Request(ctx context.Context, userID int64, changes []models.MaintenanceChange) (models.MaintenanceJob, error) {
+	active, err := s.store.ListActiveMaintenance(ctx)
+	if err != nil {
+		return models.MaintenanceJob{}, err
+	}
+	for _, j := range active {
+		if j.UserID != userID {
+			return models.MaintenanceJob{}, ErrMaintenanceBusy
+		}
+	}
+
 	lockers, err := s.store.ListLockers(ctx)
 	if err != nil {
 		return models.MaintenanceJob{}, err

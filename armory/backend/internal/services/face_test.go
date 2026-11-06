@@ -208,6 +208,117 @@ func TestFaceNativeEmbeddings(t *testing.T) {
 	}
 }
 
+func TestMatchRefusesAnAmbiguousFace(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	alice, err := users.Create(ctx, "Alice", "A1", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := users.Create(ctx, "Bob", "B1", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, alice.ID, [][]float64{descriptorAt(0), descriptorAt(0.01)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, bob.ID, [][]float64{descriptorAt(0.04)}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := face.Match(ctx, descriptorAt(0.02))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Matched || !res.Ambiguous {
+		t.Fatalf("two users within the margin: got %+v, want ambiguous and unmatched", res)
+	}
+
+	if err := face.Enroll(ctx, bob.ID, [][]float64{descriptorAt(0.4)}); err != nil {
+		t.Fatal(err)
+	}
+	res, err = face.Match(ctx, descriptorAt(0.02))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Matched || res.User.ID != alice.ID || res.Ambiguous {
+		t.Fatalf("clearly closer to one user: got %+v", res)
+	}
+}
+
+func TestMatchMarginIgnoresTheSameUsersOtherVectors(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	alice, err := users.Create(ctx, "Alice", "A1", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, alice.ID, [][]float64{nativeAt(0), nativeAt(0.02), nativeAt(0.04)}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := face.Match(ctx, nativeAt(0.01))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Matched || res.Ambiguous || res.User.ID != alice.ID {
+		t.Fatalf("one user with close vectors: got %+v", res)
+	}
+}
+
+func TestNativeMarginIsWiderThanFaceApi(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	alice, err := users.Create(ctx, "Alice", "A1", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := users.Create(ctx, "Bob", "B1", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, alice.ID, [][]float64{nativeAt(0)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, bob.ID, [][]float64{nativeAt(0.5)}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := face.Match(ctx, nativeAt(0.1))
+	if err != nil || !res.Matched || res.User.ID != alice.ID {
+		t.Fatalf("gap 0.3: got %+v, %v", res, err)
+	}
+	res, err = face.Match(ctx, nativeAt(0.28))
+	if err != nil || res.Matched || !res.Ambiguous {
+		t.Fatalf("gap 0.04: got %+v, %v, want ambiguous", res, err)
+	}
+}
+
+func TestEnrollmentDuplicateCheckIgnoresTheMargin(t *testing.T) {
+	ctx := context.Background()
+	users, face := newFaceFixture(t)
+
+	ann, err := users.Create(ctx, "Ann", "", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cal, err := users.Create(ctx, "Cal", "", "requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, ann.ID, [][]float64{descriptorAt(0)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := face.Enroll(ctx, cal.ID, [][]float64{descriptorAt(0.04)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := face.RequestEnrollment(ctx, "Rosh", [][]float64{descriptorAt(0.02)}); !errors.Is(err, ErrFaceAlreadyEnrolled) {
+		t.Fatalf("got %v, want ErrFaceAlreadyEnrolled", err)
+	}
+}
+
 func TestEnrollmentIsKeyedByName(t *testing.T) {
 	ctx := context.Background()
 	users, face := newFaceFixture(t)

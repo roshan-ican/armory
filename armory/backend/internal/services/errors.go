@@ -40,4 +40,5 @@ var (
 	ErrEmptyPlan           = errors.New("add at least one change to the plan")
 	ErrBadChange           = errors.New("that change does not fit the locker")
 	ErrMaintenanceActive   = errors.New("the armory is under maintenance right now, please try again when it is finished")
+	ErrMaintenanceBusy     = errors.New("someone is already doing maintenance, please wait until they finish")
 )
