@@ -9,51 +9,40 @@ import (
 	"armory/internal/services"
 )
 
-func (s *Server) identifyFace(w http.ResponseWriter, r *http.Request) {
+func (s *Server) matchRequester(w http.ResponseWriter, r *http.Request) (services.MatchResult, bool) {
 	var body struct {
 		Descriptor []float64 `json:"descriptor"`
 	}
 	if !readJSON(w, r, &body) {
-		return
+		return services.MatchResult{}, false
 	}
 	res, err := s.face.Match(r.Context(), body.Descriptor)
 	if errors.Is(err, services.ErrInvalidDescriptor) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return services.MatchResult{}, false
 	}
 	if err != nil {
 		serverError(w, err)
-		return
+		return services.MatchResult{}, false
 	}
-	if !res.Matched || res.User.Role == "admin" {
+	if !res.Matched || res.User.IsAdmin() {
 		writeJSON(w, map[string]any{"matched": false})
+		return services.MatchResult{}, false
+	}
+	return res, true
+}
+
+func (s *Server) identifyFace(w http.ResponseWriter, r *http.Request) {
+	res, ok := s.matchRequester(w, r)
+	if !ok {
 		return
 	}
 	writeJSON(w, map[string]any{"matched": true, "name": res.User.Name})
 }
 
 func (s *Server) matchFace(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Descriptor []float64 `json:"descriptor"`
-	}
-	if !readJSON(w, r, &body) {
-		return
-	}
-	res, err := s.face.Match(r.Context(), body.Descriptor)
-	if errors.Is(err, services.ErrInvalidDescriptor) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	if !res.Matched {
-		writeJSON(w, map[string]any{"matched": false})
-		return
-	}
-	if res.User.Role == "admin" {
-		writeJSON(w, map[string]any{"matched": false})
+	res, ok := s.matchRequester(w, r)
+	if !ok {
 		return
 	}
 	s.startSession(w, r, s.sessions.Start(res.User))

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,9 +46,15 @@ func (s *Server) endSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {
+	return s.adminOnlyWithSession(func(w http.ResponseWriter, r *http.Request, _ services.Session) {
+		next(w, r)
+	})
+}
+
+func (s *Server) adminOnlyWithSession(next func(http.ResponseWriter, *http.Request, services.Session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if sess, ok := s.session(r); ok && sess.IsAdmin() {
-			next(w, r)
+			next(w, r, sess)
 			return
 		}
 		switch {
@@ -117,4 +124,9 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func pathID(r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	return id, err == nil
 }

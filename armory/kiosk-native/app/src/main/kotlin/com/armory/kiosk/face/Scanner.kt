@@ -55,11 +55,13 @@ class VerifyScanner(
     private var passedAt = 0L
     private val samples = mutableListOf<FloatArray>()
     private var lastSampleAt = 0L
+    private var misses = 0
 
     fun restart() {
         stage = Stage.COLLECT
         challenge = null
         pending.clear()
+        misses = 0
         identity = null
         who = ""
         passedAt = 0
@@ -73,6 +75,7 @@ class VerifyScanner(
         challenge = null
         pending.clear()
         pending.addAll(Challenge.sequence())
+        misses = 0
         stage = Stage.CHALLENGE
     }
 
@@ -140,9 +143,19 @@ class VerifyScanner(
                 stage = Stage.CONFIRM
                 publish(ScanState.Checking)
             }
-            Progress.EXPIRED -> restart()
+            Progress.EXPIRED -> retryChallenge()
             Progress.PENDING -> Unit
         }
+    }
+
+    private fun retryChallenge() {
+        misses++
+        if (misses >= MAX_MISSES) {
+            restart()
+            return
+        }
+        challenge = null
+        pending.clear()
     }
 
     private fun confirm(obs: Observation, signal: FaceSignal) {
@@ -161,6 +174,7 @@ class VerifyScanner(
 
     companion object {
         const val CONFIRM_MS = 2000L
+        const val MAX_MISSES = 3
         const val IDENT_SAMPLES = 2
         const val SAMPLE_GAP_MS = 100L
         const val SAME_PERSON_MAX = 0.8f

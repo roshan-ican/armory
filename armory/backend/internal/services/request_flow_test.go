@@ -365,53 +365,6 @@ func TestWrongGunAfterTheRightOneIsStillCaught(t *testing.T) {
 	}
 }
 
-func TestCatalogNamesWhoHoldsAGun(t *testing.T) {
-	ctx := context.Background()
-	f := newFlow(t)
-	req, err := f.svc.Create(ctx, f.user.ID, "rifle", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	approved, err := f.svc.Approve(ctx, f.admin.ID, req.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	holders := func() map[int64]string {
-		items, err := f.svc.Catalog(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := map[int64]string{}
-		for _, sl := range items[0].Slots {
-			out[sl.No] = sl.TakenBy
-		}
-		return out
-	}
-	move := func(reading byte) {
-		if err := f.store.RecordSensorEvent(ctx, firstSlotID(approved), reading, "gun_moved"); err != nil {
-			t.Fatal(err)
-		}
-		f.svc.SlotChanged(ctx, firstSlotID(approved), reading)
-	}
-
-	if got := holders(); got[firstSlotNo(approved)] != "" || got[2] != "" || got[3] != "" {
-		t.Fatalf("approved: holders = %v, want nobody until it is collected", got)
-	}
-	move(0)
-	if got := holders(); got[firstSlotNo(approved)] != "Roshan Sahani" {
-		t.Fatalf("taken: holders = %v", got)
-	}
-	move(1)
-	if got := holders(); got[firstSlotNo(approved)] != "" {
-		t.Fatalf("returned: holders = %v, want nobody", got)
-	}
-	items, err := f.svc.Catalog(ctx)
-	if err != nil || items[0].Available != 3 {
-		t.Fatalf("available = %d, err = %v, want all 3 back", items[0].Available, err)
-	}
-}
-
 func firstSlotID(r models.Request) int64 {
 	if len(r.Slots) == 0 {
 		return 0

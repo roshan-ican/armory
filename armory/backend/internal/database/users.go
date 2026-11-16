@@ -53,7 +53,7 @@ func (s *Store) CreateAdmin(ctx context.Context, name, username, passwordHash st
 		return models.User{}, err
 	}
 	id, err := res.LastInsertId()
-	return models.User{ID: id, Name: name, ServiceNo: username, Role: "admin"}, err
+	return models.User{ID: id, Name: name, ServiceNo: username, Role: models.RoleAdmin}, err
 }
 
 func (s *Store) CountPasswordAdmins(ctx context.Context) (int, error) {
@@ -171,7 +171,7 @@ func (s *Store) DeactivateRequester(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	if role != "requester" {
+	if role != models.RoleRequester {
 		return ErrConflict
 	}
 	var open int

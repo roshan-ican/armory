@@ -65,20 +65,6 @@ func translateRequestError(err error) error {
 	return err
 }
 
-func (s *RequestService) requireAdmin(ctx context.Context, userID int64) error {
-	u, err := s.store.GetUser(ctx, userID)
-	if errors.Is(err, database.ErrNotFound) {
-		return ErrNotAdmin
-	}
-	if err != nil {
-		return err
-	}
-	if u.Role != "admin" {
-		return ErrNotAdmin
-	}
-	return nil
-}
-
 func (s *RequestService) guardMaintenance(ctx context.Context) error {
 	active, err := s.store.MaintenanceActive(ctx)
 	if err != nil {
@@ -94,7 +80,7 @@ func (s *RequestService) Create(ctx context.Context, userID int64, kind, reason 
 	if err := s.guardMaintenance(ctx); err != nil {
 		return models.Request{}, err
 	}
-	if kind != "pistol" && kind != "rifle" {
+	if !models.ValidKind(kind) {
 		return models.Request{}, ErrInvalidKind
 	}
 	if _, err := s.store.GetUser(ctx, userID); errors.Is(err, database.ErrNotFound) {
@@ -209,7 +195,7 @@ func (s *RequestService) Catalog(ctx context.Context) ([]CatalogItem, error) {
 }
 
 func (s *RequestService) Approve(ctx context.Context, adminID, id int64) (models.Request, error) {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return models.Request{}, err
 	}
 	req, err := s.store.ApproveRequest(ctx, id, adminID)
@@ -240,7 +226,7 @@ func (s *RequestService) Approve(ctx context.Context, adminID, id int64) (models
 }
 
 func (s *RequestService) Reject(ctx context.Context, adminID, id int64) error {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return err
 	}
 	if err := s.store.RejectRequest(ctx, id, adminID, ""); err != nil {
@@ -270,7 +256,7 @@ func (s *RequestService) Close(ctx context.Context, actorID, id int64, force boo
 	if err != nil {
 		return nil, err
 	}
-	admin := actor.Role == "admin"
+	admin := actor.IsAdmin()
 	if force && !admin {
 		return nil, ErrNotAdmin
 	}
@@ -333,16 +319,8 @@ func (s *RequestService) Recent(ctx context.Context) ([]models.Request, error) {
 }
 
 type RequestHistoryPage struct {
+	Pager
 	Requests []models.Request
-	Page     int
-	Pages    int
-	Total    int
-	First    int
-	Last     int
-	HasPrev  bool
-	HasNext  bool
-	Prev     int
-	Next     int
 }
 
 func (s *RequestService) HistoryPage(ctx context.Context, page int) (RequestHistoryPage, error) {
@@ -350,24 +328,13 @@ func (s *RequestService) HistoryPage(ctx context.Context, page int) (RequestHist
 	if err != nil {
 		return RequestHistoryPage{}, err
 	}
-	pages := (total + requestPageSize - 1) / requestPageSize
-	if pages < 1 {
-		pages = 1
-	}
-	page = min(max(page, 1), pages)
-	list, err := s.store.ListRequestHistory(ctx, requestPageSize, (page-1)*requestPageSize)
+	pager := newPager(total, requestPageSize, page)
+	list, err := s.store.ListRequestHistory(ctx, requestPageSize, pager.offset())
 	if err != nil {
 		return RequestHistoryPage{}, err
 	}
-	p := RequestHistoryPage{
-		Requests: list, Page: page, Pages: pages, Total: total,
-		HasPrev: page > 1, HasNext: page < pages, Prev: page - 1, Next: page + 1,
-	}
-	if total > 0 {
-		p.First = (page-1)*requestPageSize + 1
-		p.Last = p.First + len(list) - 1
-	}
-	return p, nil
+	pager.shown(len(list))
+	return RequestHistoryPage{Pager: pager, Requests: list}, nil
 }
 
 func (s *RequestService) view(ctx context.Context, req models.Request) (RequestView, error) {
@@ -434,7 +401,7 @@ func (s *RequestService) Reopen(ctx context.Context, userID int64) (RequestView,
 
 func (s *RequestService) Availability(ctx context.Context) (map[string]int64, error) {
 	out := make(map[string]int64, 2)
-	for _, kind := range []string{"pistol", "rifle"} {
+	for _, kind := range models.Kinds {
 		n, err := s.store.CountAvailable(ctx, kind)
 		if err != nil {
 			return nil, err

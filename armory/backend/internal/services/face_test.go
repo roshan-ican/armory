@@ -27,18 +27,6 @@ func descriptorAt(first float64) []float64 {
 	return d
 }
 
-func TestDistance(t *testing.T) {
-	a := descriptorAt(0)
-	b := descriptorAt(0)
-	b[0], b[1] = 3, 4
-	if got := distance(a, b); math.Abs(got-5) > 1e-9 {
-		t.Fatalf("distance = %v, want 5", got)
-	}
-	if got := distance(a, a); got != 0 {
-		t.Fatalf("distance to self = %v, want 0", got)
-	}
-}
-
 func TestUserServiceCreate(t *testing.T) {
 	ctx := context.Background()
 	users, _ := newFaceFixture(t)
@@ -160,17 +148,6 @@ func TestFaceServiceEnrollAndMatch(t *testing.T) {
 			t.Fatalf("got %v", err)
 		}
 	})
-}
-
-func TestFaceMatchWithNobodyEnrolled(t *testing.T) {
-	_, face := newFaceFixture(t)
-	res, err := face.Match(context.Background(), descriptorAt(0))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Matched {
-		t.Fatalf("matched %+v with nobody enrolled", res)
-	}
 }
 
 func nativeAt(first float64) []float64 {

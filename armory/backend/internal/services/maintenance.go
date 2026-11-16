@@ -20,16 +20,8 @@ func NewMaintenanceService(store *database.Store, hw Hardware, hub *live.Hub) *M
 	return &MaintenanceService{store: store, hw: hw, hub: hub}
 }
 
-func (s *MaintenanceService) requireAdmin(ctx context.Context, adminID int64) error {
-	u, err := s.store.GetUser(ctx, adminID)
-	if errors.Is(err, database.ErrNotFound) || (err == nil && u.Role != "admin") {
-		return ErrNotAdmin
-	}
-	return err
-}
-
 func (s *MaintenanceService) Assign(ctx context.Context, adminID, userID int64) error {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return err
 	}
 	u, err := s.store.GetUser(ctx, userID)
@@ -39,7 +31,7 @@ func (s *MaintenanceService) Assign(ctx context.Context, adminID, userID int64) 
 	if err != nil {
 		return err
 	}
-	if u.Role != "requester" {
+	if u.Role != models.RoleRequester {
 		return ErrNotRequester
 	}
 	if u.Faces == 0 {
@@ -62,7 +54,7 @@ func (s *MaintenanceService) Assign(ctx context.Context, adminID, userID int64) 
 }
 
 func (s *MaintenanceService) StartForUser(ctx context.Context, adminID, userID int64) error {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return err
 	}
 	u, err := s.store.GetUser(ctx, userID)
@@ -72,7 +64,7 @@ func (s *MaintenanceService) StartForUser(ctx context.Context, adminID, userID i
 	if err != nil {
 		return err
 	}
-	if u.Role != "requester" {
+	if u.Role != models.RoleRequester {
 		return ErrNotRequester
 	}
 	_, err = s.store.StartMaintainceByAdmin(ctx, userID, adminID)
@@ -95,7 +87,7 @@ func (s *MaintenanceService) StartForUser(ctx context.Context, adminID, userID i
 }
 
 func (s *MaintenanceService) FinishByID(ctx context.Context, adminID, jobID int64) error {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return err
 	}
 	err := s.store.FinishMaintenanceByID(ctx, jobID)
@@ -181,7 +173,7 @@ func (s *MaintenanceService) Request(ctx context.Context, userID int64, changes 
 }
 
 func (s *MaintenanceService) Approve(ctx context.Context, adminID, jobID int64) error {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return err
 	}
 	err := s.store.ApproveMaintenance(ctx, jobID, adminID)
@@ -197,7 +189,7 @@ func (s *MaintenanceService) Approve(ctx context.Context, adminID, jobID int64) 
 }
 
 func (s *MaintenanceService) Cancel(ctx context.Context, adminID, jobID int64) error {
-	if err := s.requireAdmin(ctx, adminID); err != nil {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
 		return err
 	}
 	err := s.store.CancelMaintenance(ctx, jobID)

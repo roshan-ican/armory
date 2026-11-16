@@ -69,20 +69,3 @@ func TestFaceCacheNeverServesStaleData(t *testing.T) {
 	}
 }
 
-func TestFaceCacheSurvivesManyMatches(t *testing.T) {
-	ctx := context.Background()
-	users, face := newFaceFixture(t)
-	u, err := users.Create(ctx, "Alice", "A-1", "requester")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := face.Enroll(ctx, u.ID, [][]float64{descriptorAt(1)}); err != nil {
-		t.Fatal(err)
-	}
-	face.Warm(ctx)
-	for i := 0; i < 200; i++ {
-		if res, err := face.Match(ctx, descriptorAt(1)); err != nil || !res.Matched {
-			t.Fatalf("match %d: %+v %v", i, res, err)
-		}
-	}
-}

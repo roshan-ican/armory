@@ -99,9 +99,9 @@ class Challenge(
 
         fun any(): Challenge = Challenge(ChallengeKind.ANY)
 
-        private val SEQUENCE_POOL = listOf(ChallengeKind.BLINK, ChallengeKind.SMILE, ChallengeKind.TURN_LEFT, ChallengeKind.TURN_RIGHT)
+        private val SEQUENCE_POOL = listOf(ChallengeKind.BLINK, ChallengeKind.TURN_LEFT, ChallengeKind.TURN_RIGHT)
 
-        fun sequence(count: Int = 2, random: kotlin.random.Random = kotlin.random.Random.Default): List<ChallengeKind> =
+        fun sequence(count: Int = 1,random: kotlin.random.Random = kotlin.random.Random.Default): List<ChallengeKind> =
             SEQUENCE_POOL.shuffled(random).take(count)
     }
 }

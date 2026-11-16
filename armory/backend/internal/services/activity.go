@@ -16,16 +16,8 @@ const (
 type ActivityFilter = database.EventFilter
 
 type ActivityPage struct {
+	Pager
 	Events  []models.Event
-	Page    int
-	Pages   int
-	Total   int
-	First   int
-	Last    int
-	HasPrev bool
-	HasNext bool
-	Prev    int
-	Next    int
 	Filter  ActivityFilter
 	Query   string
 	People  []string
@@ -72,17 +64,8 @@ func (s *ActivityService) Page(ctx context.Context, page int, f ActivityFilter) 
 	if err != nil {
 		return ActivityPage{}, err
 	}
-	pages := (total + activityPageSize - 1) / activityPageSize
-	if pages < 1 {
-		pages = 1
-	}
-	if page < 1 {
-		page = 1
-	}
-	if page > pages {
-		page = pages
-	}
-	events, err := s.store.ListEventsPage(ctx, f, activityPageSize, (page-1)*activityPageSize)
+	pager := newPager(total, activityPageSize, page)
+	events, err := s.store.ListEventsPage(ctx, f, activityPageSize, pager.offset())
 	if err != nil {
 		return ActivityPage{}, err
 	}
@@ -95,17 +78,13 @@ func (s *ActivityService) Page(ctx context.Context, page int, f ActivityFilter) 
 		return ActivityPage{}, err
 	}
 	p := ActivityPage{
-		Events: events, Page: page, Pages: pages, Total: total,
-		HasPrev: page > 1, HasNext: page < pages, Prev: page - 1, Next: page + 1,
+		Pager: pager, Events: events,
 		Filter: f, Query: filterQuery(f), People: people, Types: activityTypes,
 	}
 	for _, l := range lockers {
 		p.Lockers = append(p.Lockers, l.Name)
 	}
-	if total > 0 {
-		p.First = (page-1)*activityPageSize + 1
-		p.Last = p.First + len(events) - 1
-	}
+	p.shown(len(events))
 	return p, nil
 }
 

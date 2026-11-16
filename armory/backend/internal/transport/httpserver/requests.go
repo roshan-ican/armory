@@ -205,16 +205,11 @@ func (s *Server) apiCloseRequest(w http.ResponseWriter, r *http.Request, sess se
 	writeJSON(w, map[string]any{"ok": len(problems) == 0, "problems": problems})
 }
 
-func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request, sess services.Session) {
 	target := "#request-error-" + r.PathValue("id")
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
-		return
-	}
-	sess, ok := s.session(r)
-	if !ok || !sess.IsAdmin() {
-		formErrorAt(w, services.ErrNotAdmin, target)
 		return
 	}
 	problems, err := s.requests.Close(r.Context(), sess.UserID, id, r.FormValue("force") == "1")
@@ -267,7 +262,7 @@ func (s *Server) requestsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	var requesters []models.User
 	for _, u := range people {
-		if u.Role == "requester" {
+		if u.Role == models.RoleRequester {
 			requesters = append(requesters, u)
 		}
 	}
@@ -304,19 +299,15 @@ func (s *Server) requestsBadge(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) decideRequest(approve bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) decideRequest(approve bool) func(http.ResponseWriter, *http.Request, services.Session) {
+	return func(w http.ResponseWriter, r *http.Request, sess services.Session) {
 		target := "#request-error-" + r.PathValue("id")
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
+		id, ok := pathID(r)
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
-		sess, ok := s.session(r)
-		if !ok || !sess.IsAdmin() {
-			formErrorAt(w, services.ErrNotAdmin, target)
-			return
-		}
+		var err error
 		if approve {
 			_, err = s.requests.Approve(r.Context(), sess.UserID, id)
 		} else {

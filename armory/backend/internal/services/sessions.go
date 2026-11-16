@@ -23,7 +23,7 @@ type Session struct {
 }
 
 func (s Session) IsAdmin() bool {
-	return s.Role == "admin"
+	return s.Role == models.RoleAdmin
 }
 
 type Sessions struct {
@@ -37,7 +37,7 @@ func NewSessions() *Sessions {
 }
 
 func ttlFor(role string) time.Duration {
-	if role == "admin" {
+	if role == models.RoleAdmin {
 		return adminSession
 	}
 	return requesterSession

@@ -79,7 +79,7 @@ func (s *Store) DecideFaceEnrollmentRequest(ctx context.Context, id, adminID int
 			}
 		} else if err != nil {
 			return err
-		} else if role != "requester" {
+		} else if role != models.RoleRequester {
 			return ErrDuplicate
 		} else {
 			if _, err := tx.ExecContext(ctx, "UPDATE face_enrollments SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", ts, userID); err != nil {

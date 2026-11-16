@@ -9,18 +9,13 @@ import (
 	"armory/internal/services"
 )
 
-func (s *Server) assignMaintenance(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.session(r)
-	if !ok || !sess.IsAdmin() {
-		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
-		return
-	}
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+func (s *Server) assignMaintenance(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	err = s.maintain.Assign(r.Context(), sess.UserID, id)
+	err := s.maintain.Assign(r.Context(), sess.UserID, id)
 	if errors.Is(err, services.ErrUserNotFound) {
 		http.NotFound(w, r)
 		return
@@ -36,18 +31,13 @@ func (s *Server) assignMaintenance(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
-func (s *Server) cancelMaintenance(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.session(r)
-	if !ok || !sess.IsAdmin() {
-		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
-		return
-	}
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+func (s *Server) cancelMaintenance(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	err = s.maintain.Cancel(r.Context(), sess.UserID, id)
+	err := s.maintain.Cancel(r.Context(), sess.UserID, id)
 	if errors.Is(err, services.ErrMaintenanceNotFound) {
 		w.Header().Set("HX-Refresh", "true")
 		return
@@ -226,18 +216,13 @@ func (s *Server) apiSetCapacity(w http.ResponseWriter, r *http.Request, sess ser
 	writeJSON(w, map[string]any{"ok": true})
 }
 
-func (s *Server) approveMaintenance(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.session(r)
-	if !ok || !sess.IsAdmin() {
-		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
-		return
-	}
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+func (s *Server) approveMaintenance(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	err = s.maintain.Approve(r.Context(), sess.UserID, id)
+	err := s.maintain.Approve(r.Context(), sess.UserID, id)
 	if errors.Is(err, services.ErrMaintenanceNotFound) {
 		w.Header().Set("HX-Refresh", "true")
 		return
@@ -249,12 +234,7 @@ func (s *Server) approveMaintenance(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
-func (s *Server) startMaintenanceForUser(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.session(r)
-	if !ok || !sess.IsAdmin() {
-		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
-		return
-	}
+func (s *Server) startMaintenanceForUser(w http.ResponseWriter, r *http.Request, sess services.Session) {
 	id, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
 	if err != nil {
 		formErrorAt(w, errors.New("choose who is doing the maintenance"), "#maintenance-start-error")
@@ -273,18 +253,13 @@ func (s *Server) startMaintenanceForUser(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("HX-Refresh", "true")
 }
 
-func (s *Server) finishMaintenanceByAdmin(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.session(r)
-	if !ok || !sess.IsAdmin() {
-		http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
-		return
-	}
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+func (s *Server) finishMaintenanceByAdmin(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	err = s.maintain.FinishByID(r.Context(), sess.UserID, id)
+	err := s.maintain.FinishByID(r.Context(), sess.UserID, id)
 	if err != nil && !errors.Is(err, services.ErrMaintenanceNotFound) {
 		serverError(w, err)
 		return

@@ -25,7 +25,7 @@ func (s *Store) AssignMaintenance(ctx context.Context, userID, adminID int64) (m
 	if err != nil {
 		return models.MaintenanceJob{}, err
 	}
-	if role != "requester" {
+	if role != models.RoleRequester {
 		return models.MaintenanceJob{}, ErrConflict
 	}
 
@@ -67,7 +67,7 @@ func (s *Store) StartMaintainceByAdmin(ctx context.Context, userId, adminId int6
 	if err != nil {
 		return models.MaintenanceJob{}, err
 	}
-	if role != "requester" {
+	if role != models.RoleRequester {
 		return models.MaintenanceJob{}, ErrConflict
 	}
 
@@ -141,7 +141,7 @@ func (s *Store) RequestMaintenance(ctx context.Context, userID int64, changes []
 	if err != nil {
 		return models.MaintenanceJob{}, err
 	}
-	if role != "requester" {
+	if role != models.RoleRequester {
 		return models.MaintenanceJob{}, ErrConflict
 	}
 

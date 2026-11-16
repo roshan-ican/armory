@@ -88,9 +88,9 @@ func (s *UserService) Create(ctx context.Context, name, username, role string) (
 		u.ServiceNo = userKey(u.Name)
 	}
 	if u.Role == "" {
-		u.Role = "requester"
+		u.Role = models.RoleRequester
 	}
-	if u.Role != "admin" && u.Role != "requester" {
+	if !models.ValidRole(u.Role) {
 		return models.User{}, ErrInvalidRole
 	}
 

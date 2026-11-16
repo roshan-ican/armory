@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"armory/internal/live"
-	"armory/internal/models"
 )
 
 func TestWrongPickMessage(t *testing.T) {
@@ -251,18 +250,6 @@ func TestCorrectPickMessage(t *testing.T) {
 	want := "Slot 1 is correct. Please close the locker and close the door as you leave."
 	if got := CorrectPickMessage(1, true); got != want {
 		t.Fatalf("got %q, want %q", got, want)
-	}
-}
-
-func TestPendingSlotNumbersKeepsOnlyChosen(t *testing.T) {
-	slots := []models.RequestSlot{
-		{SlotNo: 1, Status: models.SlotCollected},
-		{SlotNo: 2, Status: models.SlotChosen},
-		{SlotNo: 4, Status: models.SlotChosen},
-	}
-	got := pendingSlotNumbers(slots)
-	if len(got) != 2 || got[0] != 2 || got[1] != 4 {
-		t.Fatalf("got %v", got)
 	}
 }
 

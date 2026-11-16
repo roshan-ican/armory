@@ -102,6 +102,37 @@ func TestCloseVerifiesTheReturn(t *testing.T) {
 		}
 	})
 
+	t.Run("disabled sensor cannot confirm a return with a stale present reading", func(t *testing.T) {
+		f := newFlow(t)
+		req := f.returnedRequest(t, 1)
+		slotID := f.locker.Slots[0].ID
+		if err := f.store.SetSensorDisabled(ctx, f.locker.ID, 1, true); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.store.RecordSensorEvent(ctx, slotID, 1, "gun_returned"); err != nil {
+			t.Fatal(err)
+		}
+
+		problems, err := f.svc.Close(ctx, f.user.ID, req.ID, false)
+		if err != nil || !reflect.DeepEqual(problems, []string{"Slot 1 is not detecting."}) {
+			t.Fatalf("close with disabled sensor = %v, %v", problems, err)
+		}
+		got, err := f.store.GetRequest(ctx, req.ID)
+		if err != nil || got.ClosedAt != "" {
+			t.Fatalf("closed at = %q, err = %v, want request still open", got.ClosedAt, err)
+		}
+
+		if err := f.store.SetSensorDisabled(ctx, f.locker.ID, 1, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.store.SyncSensorSlot(ctx, slotID, 1, "gun_returned"); err != nil {
+			t.Fatal(err)
+		}
+		if problems, err := f.svc.Close(ctx, f.user.ID, req.ID, false); err != nil || len(problems) != 0 {
+			t.Fatalf("close with fresh reading = %v, %v", problems, err)
+		}
+	})
+
 	t.Run("a requester cannot force or close another user's request", func(t *testing.T) {
 		f := newFlow(t)
 		req := f.returnedRequest(t, 1)

@@ -54,7 +54,7 @@ func newLocker(name, location, ip, kind string, capacity int64) (models.Locker, 
 	if l.IPAddress != "" && net.ParseIP(l.IPAddress) == nil {
 		return models.Locker{}, ErrInvalidIP
 	}
-	if kind != "rifle" && kind != "pistol" {
+	if !models.ValidKind(kind) {
 		return models.Locker{}, ErrInvalidKind
 	}
 	if capacity < 1 || capacity > database.SlotsPerLocker {

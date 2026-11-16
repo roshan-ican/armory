@@ -76,8 +76,8 @@ func (s *Server) editLocker(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) swapSensors(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
@@ -106,8 +106,8 @@ func (s *Server) swapSensors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setSensorDisabled(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
@@ -135,8 +135,8 @@ func (s *Server) setSensorDisabled(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateLocker(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}

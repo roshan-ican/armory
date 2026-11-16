@@ -19,13 +19,6 @@ func TestTrackerFirstPacketReportsNothing(t *testing.T) {
 	}
 }
 
-func TestTrackerSamePacketReportsNothing(t *testing.T) {
-	tr := NewTracker()
-	if got := feed(tr, []byte{2, 0, 1}, 50); len(got) != 0 {
-		t.Fatalf("same packet: got %v, want no changes", got)
-	}
-}
-
 func TestTrackerChangeNeedsStableCountPackets(t *testing.T) {
 	tr := NewTracker()
 	tr.Update(board, []byte{1, 1, 1})

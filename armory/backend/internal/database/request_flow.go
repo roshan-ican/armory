@@ -177,7 +177,7 @@ func (s *Store) HasLoginAdmin(ctx context.Context) (bool, error) {
 
 func (s *Store) SlotsOfLocker(ctx context.Context, lockerID int64) ([]models.Slot, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, locker_id, slot_no, sensor_id, active, CASE WHEN sensor_pos IS NULL THEN 2 ELSE COALESCE(reading, -1) END FROM slots WHERE locker_id = ? AND active = 1 ORDER BY slot_no", lockerID)
+		"SELECT s.id, s.locker_id, s.slot_no, s.sensor_id, s.active, "+slotReadingSQL+" FROM slots s WHERE s.locker_id = ? AND s.active = 1 ORDER BY s.slot_no", lockerID)
 	if err != nil {
 		return nil, err
 	}

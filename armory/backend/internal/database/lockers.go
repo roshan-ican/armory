@@ -10,6 +10,8 @@ import (
 
 const SlotsPerLocker = 5
 
+const slotReadingSQL = `CASE WHEN s.sensor_pos IS NULL OR s.sensor_disabled = 1 THEN 2 ELSE COALESCE(s.reading, -1) END`
+
 func defaultSensorPos(slotNo, capacity, start int64, reverse bool) sql.NullInt64 {
 	if slotNo < start {
 		return sql.NullInt64{}
@@ -59,7 +61,7 @@ func (s *Store) ListLockers(ctx context.Context) ([]models.Locker, error) {
 func (s *Store) listSlots(ctx context.Context) (map[int64][]models.Slot, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.id, s.locker_id, s.slot_no, s.sensor_id, s.active, s.sensor_disabled,
-			CASE WHEN s.sensor_pos IS NULL OR s.sensor_disabled = 1 THEN 2 ELSE COALESCE(s.reading, -1) END,
+			`+slotReadingSQL+`,
 			COALESCE((SELECT u.name FROM request_slots rs
 				JOIN requests r ON r.id = rs.request_id
 				JOIN users u ON u.id = r.requester_id

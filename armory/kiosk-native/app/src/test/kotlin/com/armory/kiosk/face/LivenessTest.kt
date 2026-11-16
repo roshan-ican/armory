@@ -121,20 +121,28 @@ class LivenessTest {
     }
 
     @Test
-    fun sequenceIsTwoDistinctSpecificChallenges() {
+    fun sequenceIsOneSpecificChallenge() {
         repeat(200) {
             val s = Challenge.sequence()
-            assertEquals(2, s.size)
-            assertEquals(2, s.toSet().size)
+            assertEquals(1, s.size)
             assertFalse(ChallengeKind.ANY in s)
             assertFalse(ChallengeKind.TURN in s)
+            assertFalse(ChallengeKind.SMILE in s)
         }
     }
 
     @Test
     fun sequenceVariesBetweenAttempts() {
-        val seen = (1..200).map { Challenge.sequence() }.toSet()
-        assertTrue(seen.size > 6)
+        val seen = (1..200).flatMap { Challenge.sequence() }.toSet()
+        assertEquals(setOf(ChallengeKind.BLINK, ChallengeKind.TURN_LEFT, ChallengeKind.TURN_RIGHT), seen)
+    }
+
+    @Test
+    fun longerSequencesStayDistinct() {
+        repeat(200) {
+            val s = Challenge.sequence(count = 2)
+            assertEquals(2, s.toSet().size)
+        }
     }
 
     @Test

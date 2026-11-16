@@ -110,19 +110,14 @@ func (s *Server) peopleBadge(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) decideEnrollment(approve bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sess, ok := s.session(r)
-		if !ok || !sess.IsAdmin() {
-			http.Error(w, "sign in as an admin first", http.StatusUnauthorized)
-			return
-		}
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
+func (s *Server) decideEnrollment(approve bool) func(http.ResponseWriter, *http.Request, services.Session) {
+	return func(w http.ResponseWriter, r *http.Request, sess services.Session) {
+		id, ok := pathID(r)
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
-		err = s.face.DecideEnrollment(r.Context(), id, sess.UserID, approve)
+		err := s.face.DecideEnrollment(r.Context(), id, sess.UserID, approve)
 		if errors.Is(err, services.ErrEnrollmentNotFound) {
 			http.NotFound(w, r)
 			return
@@ -141,12 +136,12 @@ func (s *Server) decideEnrollment(approve bool) http.HandlerFunc {
 }
 
 func (s *Server) removeUser(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	err = s.users.Remove(r.Context(), id)
+	err := s.users.Remove(r.Context(), id)
 	if errors.Is(err, services.ErrUserNotFound) {
 		http.NotFound(w, r)
 		return
@@ -164,12 +159,12 @@ func (s *Server) removeUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renameUser(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	id, ok := pathID(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	err = s.users.Rename(r.Context(), id, r.FormValue("name"))
+	err := s.users.Rename(r.Context(), id, r.FormValue("name"))
 	if errors.Is(err, services.ErrUserNotFound) {
 		http.NotFound(w, r)
 		return
