@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -9,20 +8,6 @@ import (
 	"armory/internal/models"
 	"armory/internal/services"
 )
-
-func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return false
-	}
-	return true
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}
 
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.users.List(r.Context())

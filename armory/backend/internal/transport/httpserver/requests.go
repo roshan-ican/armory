@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -60,40 +59,6 @@ func toJSON(v services.RequestView) requestJSON {
 	}
 	out.Wrong = append(out.Wrong, v.Wrong...)
 	return out
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
-}
-
-func requestErrorStatus(err error) (int, bool) {
-	switch {
-	case errors.Is(err, services.ErrInvalidKind),
-		errors.Is(err, services.ErrInvalidReturn),
-		errors.Is(err, services.ErrInvalidSlot):
-		return http.StatusBadRequest, true
-	case errors.Is(err, services.ErrRequestNotFound):
-		return http.StatusNotFound, true
-	case errors.Is(err, services.ErrRequestOpen),
-		errors.Is(err, services.ErrRequestClosed),
-		errors.Is(err, services.ErrMaintenanceActive),
-		errors.Is(err, services.ErrNoneAvailable),
-		errors.Is(err, services.ErrGunUnavailable):
-		return http.StatusConflict, true
-	case errors.Is(err, services.ErrNotAdmin):
-		return http.StatusForbidden, true
-	}
-	return 0, false
-}
-
-func (s *Server) apiError(w http.ResponseWriter, err error) {
-	if status, ok := requestErrorStatus(err); ok {
-		writeJSONError(w, status, err.Error())
-		return
-	}
-	serverError(w, err)
 }
 
 func (s *Server) apiMe(w http.ResponseWriter, r *http.Request, sess services.Session) {
@@ -213,7 +178,7 @@ func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request, sess servi
 		return
 	}
 	problems, err := s.requests.Close(r.Context(), sess.UserID, id, r.FormValue("force") == "1")
-	if _, known := requestErrorStatus(err); known {
+	if _, known := errorStatus(err); known {
 		formErrorAt(w, err, target)
 		return
 	}
@@ -313,7 +278,7 @@ func (s *Server) decideRequest(approve bool) func(http.ResponseWriter, *http.Req
 		} else {
 			err = s.requests.Reject(r.Context(), sess.UserID, id)
 		}
-		if _, known := requestErrorStatus(err); known {
+		if _, known := errorStatus(err); known {
 			formErrorAt(w, err, target)
 			return
 		}

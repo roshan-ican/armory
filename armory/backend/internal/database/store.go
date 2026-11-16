@@ -51,9 +51,3 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
-func nullIfZero(n int64) any {
-	if n == 0 {
-		return nil
-	}
-	return n
-}

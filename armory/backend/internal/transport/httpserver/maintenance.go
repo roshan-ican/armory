@@ -84,30 +84,6 @@ type maintenanceLockerJSON struct {
 	Slots    []slotJSON `json:"slots"`
 }
 
-func maintenanceStatus(err error) (int, bool) {
-	switch {
-	case errors.Is(err, services.ErrEmptyPlan),
-		errors.Is(err, services.ErrBadChange),
-		errors.Is(err, services.ErrLockerNotFound):
-		return http.StatusBadRequest, true
-	case errors.Is(err, services.ErrNotRequester):
-		return http.StatusForbidden, true
-	case errors.Is(err, services.ErrMaintenanceOpen),
-		errors.Is(err, services.ErrMaintenanceBusy),
-		errors.Is(err, services.ErrMaintenanceNotFound):
-		return http.StatusConflict, true
-	}
-	return 0, false
-}
-
-func (s *Server) maintenanceError(w http.ResponseWriter, err error) {
-	if status, ok := maintenanceStatus(err); ok {
-		writeJSONError(w, status, err.Error())
-		return
-	}
-	serverError(w, err)
-}
-
 func jobJSON(job models.MaintenanceJob) maintenanceJobJSON {
 	out := maintenanceJobJSON{ID: job.ID, Status: job.Status, Changes: []changeJSON{}}
 	for _, c := range job.Changes {
@@ -163,7 +139,7 @@ func (s *Server) apiRequestMaintenance(w http.ResponseWriter, r *http.Request, s
 	}
 	job, err := s.maintain.Request(r.Context(), sess.UserID, changes)
 	if err != nil {
-		s.maintenanceError(w, err)
+		s.apiError(w, err)
 		return
 	}
 	full, err := s.maintain.Current(r.Context(), sess.UserID)
@@ -195,7 +171,7 @@ func (s *Server) apiUnlockLocker(w http.ResponseWriter, r *http.Request, sess se
 		return
 	}
 	if err := s.maintain.UnlockLocker(r.Context(), sess.UserID, body.LockerID); err != nil {
-		s.maintenanceError(w, err)
+		s.apiError(w, err)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
@@ -210,7 +186,7 @@ func (s *Server) apiSetCapacity(w http.ResponseWriter, r *http.Request, sess ser
 		return
 	}
 	if err := s.maintain.SetCapacity(r.Context(), sess.UserID, body.LockerID, body.Capacity); err != nil {
-		s.maintenanceError(w, err)
+		s.apiError(w, err)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
