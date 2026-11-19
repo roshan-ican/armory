@@ -27,6 +27,7 @@ data class GunRequest(
     val wrong: List<Int>,
     val closeNote: String = "",
     val closed: Boolean = false,
+    val returnState: String = "",
 ) {
     fun chosenNos(status: String? = null): List<Int> =
         chosen.filter { status == null || it.status == status }.map { it.no }

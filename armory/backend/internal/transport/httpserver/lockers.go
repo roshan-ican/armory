@@ -63,6 +63,24 @@ func (s *Server) lockerFor(w http.ResponseWriter, r *http.Request) (models.Locke
 	return l, true
 }
 
+func (s *Server) openLocker(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	err := s.maintain.AdminOpenLocker(r.Context(), sess.UserID, id)
+	if errors.Is(err, services.ErrLockerNotFound) {
+		formErrorAt(w, err, "#locker-error-"+r.PathValue("id"))
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) lockerCard(w http.ResponseWriter, r *http.Request) {
 	if l, ok := s.lockerFor(w, r); ok {
 		s.render(w, "lockers", "locker_card", l)

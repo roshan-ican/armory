@@ -129,6 +129,29 @@
     </div>
   </section>
 
+  {{if .Returning}}
+  <section aria-labelledby="returning-title">
+    <h2 id="returning-title" class="section-title">Wants to return</h2>
+    <div class="request-list">
+      {{range .Returning}}
+      <article class="request-card" id="returning-{{.Request.ID}}">
+        <span class="avatar" aria-hidden="true">{{.Request.Initials}}</span>
+        <div class="request-body">
+          <strong>{{.Request.UserName}}</strong>
+          <span class="request-line">{{if .Request.LockerName}}{{.Request.LockerName}} · {{end}}Took gun {{.Taken}}</span>
+          <span class="request-reason">{{if .StillOut}}Returning now: gun {{.StillOut}}{{else}}Nothing left to return{{end}}{{if .Returned}} · Already back: gun {{.Returned}}{{end}}{{if .PutBack}} · Wrong gun to put back: {{.PutBack}}{{end}}</span>
+        </div>
+        <div class="request-actions">
+          <button type="button" class="button-quiet" hx-post="/admin/requests/{{.Request.ID}}/return/decline" hx-swap="none" hx-select="unset">Decline</button>
+          <button type="button" class="button-primary" hx-post="/admin/requests/{{.Request.ID}}/return/approve" hx-swap="none" hx-select="unset">Approve</button>
+        </div>
+        <p id="return-error-{{.Request.ID}}" class="form-error request-error" role="alert"></p>
+      </article>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
   {{if .Awaiting}}
   <section aria-labelledby="awaiting-title">
     <h2 id="awaiting-title" class="section-title">Awaiting close</h2>

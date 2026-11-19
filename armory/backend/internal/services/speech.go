@@ -76,6 +76,14 @@ func AdminReturnedMessage(name string, returned int64, last bool) string {
 	return fmt.Sprintf("%s has returned gun %d.", who, returned)
 }
 
+func AdminReturnRequestMessage(name string, taken, stillOut []int64) string {
+	who := personOrSomeone(name)
+	if len(stillOut) == 0 {
+		return fmt.Sprintf("%s wants to return a gun. They had taken %s. Please approve.", who, slotWords(taken))
+	}
+	return fmt.Sprintf("%s wants to return a gun. They had taken %s. Returning now: %s. Please approve.", who, slotWords(taken), slotWords(stillOut))
+}
+
 func AdminTakenAfterReturnMessage(name string, picked int64) string {
 	return fmt.Sprintf("%s has taken gun %d after the request was already complete.", personOrSomeone(name), picked)
 }
@@ -108,6 +116,14 @@ func ApprovedMessage(locker string, slots []int64, door bool) string {
 		text += fmt.Sprintf(" Please take %s %s.", noun, slotWords(slots))
 	}
 	return text
+}
+
+func ReturnApprovedMessage(locker string) string {
+	return fmt.Sprintf("Approved. %s is open. Please return the gun.", locker)
+}
+
+func ReturnDeclinedMessage() string {
+	return "The admin did not approve the return. Please speak to the admin."
 }
 
 func ReturnedMessage() string {

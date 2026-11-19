@@ -33,6 +33,7 @@ type requestJSON struct {
 	Wrong            []int64      `json:"wrong"`
 	CloseNote        string       `json:"close_note"`
 	Closed           bool         `json:"closed"`
+	ReturnState      string       `json:"return_state"`
 }
 
 func toJSON(v services.RequestView) requestJSON {
@@ -47,6 +48,7 @@ func toJSON(v services.RequestView) requestJSON {
 		Wrong:            []int64{},
 		CloseNote:        v.Request.CloseNote,
 		Closed:           v.Request.ClosedAt != "",
+		ReturnState:      v.ReturnState,
 	}
 	for _, sl := range v.Request.Slots {
 		out.Chosen = append(out.Chosen, chosenJSON{No: sl.SlotNo, Status: sl.Status})
@@ -124,6 +126,14 @@ func (s *Server) apiCurrentRequest(w http.ResponseWriter, r *http.Request, sess 
 		return
 	}
 	writeJSON(w, toJSON(v))
+}
+
+func (s *Server) apiOpenForReturn(w http.ResponseWriter, r *http.Request, sess services.Session) {
+	if err := s.requests.OpenForReturn(r.Context(), sess.UserID); err != nil {
+		s.apiError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) apiGetRequest(w http.ResponseWriter, r *http.Request, sess services.Session) {
@@ -220,6 +230,11 @@ func (s *Server) requestsPage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	returning, err := s.requests.Returning(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	people, err := s.users.List(r.Context())
 	if err != nil {
 		serverError(w, err)
@@ -235,6 +250,7 @@ func (s *Server) requestsPage(w http.ResponseWriter, r *http.Request) {
 		"Title":             "Requests",
 		"Pending":           pending,
 		"Awaiting":          awaiting,
+		"Returning":         returning,
 		"Maintenance":       maintenance,
 		"ActiveMaintenance": active,
 		"Requesters":        requesters,
@@ -258,9 +274,40 @@ func (s *Server) requestsBadge(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	returning, err := s.requests.Returning(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if n := len(pending) + len(maintenance) + len(awaiting); n > 0 {
+	if n := len(pending) + len(maintenance) + len(awaiting) + len(returning); n > 0 {
 		w.Write([]byte(strconv.Itoa(n)))
+	}
+}
+
+func (s *Server) decideReturn(approve bool) func(http.ResponseWriter, *http.Request, services.Session) {
+	return func(w http.ResponseWriter, r *http.Request, sess services.Session) {
+		target := "#return-error-" + r.PathValue("id")
+		id, ok := pathID(r)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		var err error
+		if approve {
+			err = s.requests.ApproveReturn(r.Context(), sess.UserID, id)
+		} else {
+			err = s.requests.DeclineReturn(r.Context(), sess.UserID, id)
+		}
+		if _, known := errorStatus(err); known {
+			formErrorAt(w, err, target)
+			return
+		}
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

@@ -97,7 +97,7 @@ fun KioskApp(model: KioskViewModel, cameraGranted: Boolean) {
                         Step.GUNS -> GunsStep(model, state)
                         Step.REVIEW -> ReviewStep(model, state)
                         Step.WAITING -> WaitingStep(model, state)
-                        Step.OPEN, Step.WRONG -> OpenStep(state, step == Step.WRONG)
+                        Step.OPEN, Step.WRONG -> OpenStep(model, state, step == Step.WRONG)
                         Step.COLLECTED -> CollectedStep(model, state)
                         Step.DECLINED -> Simple("×", Palette.Red, "NOT APPROVED", "Request declined", "Ask an administrator if you need help.", "Start over", model::beginFace)
                         Step.RETURNED -> ConfirmStep(model, state)
@@ -525,7 +525,7 @@ private fun WaitingStep(model: KioskViewModel, state: UiState) {
 }
 
 @Composable
-private fun OpenStep(state: UiState, wrong: Boolean) {
+private fun OpenStep(model: KioskViewModel, state: UiState, wrong: Boolean) {
     val r = state.request
     val remaining = r?.chosenNos("chosen").orEmpty()
     val body = when {
@@ -558,6 +558,13 @@ private fun OpenStep(state: UiState, wrong: Boolean) {
                 ) { Text("${slot.no}", color = Palette.Text, fontWeight = FontWeight.Bold, modifier = Modifier.padding(10.dp)) }
             }
         }
+        PrimaryButton(
+            if (state.busy) "Please wait…" else if (wrong) "Put it back" else "Open locker",
+            enabled = !state.busy,
+            onClick = { model.openForReturn() },
+        )
+        if (!wrong) QuietButton("Done") { model.beginFace() }
+        ErrorLine(state.error)
     }
 }
 
@@ -567,17 +574,53 @@ private fun CollectedStep(model: KioskViewModel, state: UiState) {
     val nos = r?.chosenNos().orEmpty()
     val back = r?.chosenNos("returned").orEmpty()
     val locker = r?.lockerName.orEmpty()
-    if (nos.size > 1 && back.isNotEmpty()) {
-        val left = nos - back.toSet()
-        Simple(
-            "↩", Palette.Yellow, "RETURNING", "${back.size} of ${nos.size} guns returned",
-            "Still to return to $locker: slot${if (left.size > 1) "s" else ""} ${listNos(left)}.", "Done", model::beginFace,
-        )
+    val plural = nos.size > 1
+    val gunWord = if (plural) "guns" else "gun"
+    if (r?.returnState == "pending") {
+        Screen {
+            Box(Modifier.size(104.dp).clip(CircleShape).background(Color(0x1A0A84FF)), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Palette.Blue, strokeWidth = 4.dp, modifier = Modifier.size(58.dp))
+            }
+            Copy("RETURN REQUEST SENT", "Waiting for admin approval", "An admin has been notified. Keep this screen open.")
+            QuietButton("Done") { model.beginFace() }
+        }
         return
     }
-    val body = if (nos.size > 1) "Return them to $locker, slots ${listNos(nos)}, when you are finished."
-    else "Return it to $locker, slot ${r?.slotNo ?: 0}, when you are finished."
-    Simple("✓", Palette.Green, "COLLECTED", if (nos.size > 1) "All guns collected" else "Correct item", body, "Done", model::beginFace)
+    val approved = r?.returnState == "approved"
+    val declined = r?.returnState == "declined"
+    val action = when {
+        state.busy -> "Please wait…"
+        approved -> "Open $locker again"
+        declined -> "Ask again"
+        else -> "Return the $gunWord"
+    }
+    if (plural && back.isNotEmpty()) {
+        val left = nos - back.toSet()
+        Screen {
+            Symbol("↩", Palette.Yellow)
+            Copy(
+                "RETURNING", "${back.size} of ${nos.size} guns returned",
+                "Still to return to $locker: slot${if (left.size > 1) "s" else ""} ${listNos(left)}.",
+            )
+            PrimaryButton(action, enabled = !state.busy, onClick = { model.openForReturn() })
+            QuietButton("Done") { model.beginFace() }
+            ErrorLine(state.error)
+        }
+        return
+    }
+    val body = when {
+        approved -> "Approved. $locker is open. Return the $gunWord to slot${if (plural) "s" else ""} ${if (plural) listNos(nos) else (r?.slotNo ?: 0).toString()}."
+        declined -> "The admin did not approve the return. Please speak to the admin."
+        plural -> "You still have these guns out. Return them to $locker, slots ${listNos(nos)}."
+        else -> "You still have a gun out. Return it to $locker, slot ${r?.slotNo ?: 0}."
+    }
+    Screen {
+        Symbol(if (declined) "!" else "✓", if (declined) Palette.Red else Palette.Green)
+        Copy("COLLECTED", if (plural) "Guns still out" else "Gun still out", body)
+        PrimaryButton(action, enabled = !state.busy, onClick = { model.openForReturn() })
+        QuietButton("Done") { model.beginFace() }
+        ErrorLine(state.error)
+    }
 }
 
 @Composable

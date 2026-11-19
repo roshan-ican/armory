@@ -268,6 +268,25 @@ func (s *MaintenanceService) UnlockLocker(ctx context.Context, userID, lockerID 
 	return nil
 }
 
+func (s *MaintenanceService) AdminOpenLocker(ctx context.Context, adminID, lockerID int64) error {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
+		return err
+	}
+	l, err := s.store.GetLocker(ctx, lockerID)
+	if errors.Is(err, database.ErrNotFound) {
+		return ErrLockerNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := s.hw.OpenDoor(ctx); err != nil {
+		log.Printf("admin %d: open door: %v", adminID, err)
+	}
+	s.pulseLocker(ctx, l)
+	log.Printf("admin %d: opened %s by override", adminID, l.Name)
+	return nil
+}
+
 func (s *MaintenanceService) Finish(ctx context.Context, userID int64) error {
 	err := s.store.FinishMaintenance(ctx, userID)
 	if errors.Is(err, database.ErrNotFound) {

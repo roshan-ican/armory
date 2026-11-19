@@ -225,7 +225,7 @@ func (s *FaceService) existingOwner(ctx context.Context, descriptors [][]float64
 }
 
 func (s *FaceService) Match(ctx context.Context, descriptor []float64) (MatchResult, error) {
-	return s.match(ctx, descriptor, true)
+	return s.match(ctx, descriptor, false)
 }
 
 func (s *FaceService) match(ctx context.Context, descriptor []float64, useMargin bool) (MatchResult, error) {

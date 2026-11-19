@@ -208,8 +208,8 @@ func TestMatchRefusesAnAmbiguousFace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Matched || !res.Ambiguous {
-		t.Fatalf("two users within the margin: got %+v, want ambiguous and unmatched", res)
+	if !res.Matched || res.Ambiguous || res.User.ID != alice.ID {
+		t.Fatalf("two users within the old margin: got %+v, want the nearest user", res)
 	}
 
 	if err := face.Enroll(ctx, bob.ID, [][]float64{descriptorAt(0.4)}); err != nil {
@@ -268,8 +268,8 @@ func TestNativeMarginIsWiderThanFaceApi(t *testing.T) {
 		t.Fatalf("gap 0.3: got %+v, %v", res, err)
 	}
 	res, err = face.Match(ctx, nativeAt(0.28))
-	if err != nil || res.Matched || !res.Ambiguous {
-		t.Fatalf("gap 0.04: got %+v, %v, want ambiguous", res, err)
+	if err != nil || !res.Matched || res.Ambiguous || res.User.ID != bob.ID {
+		t.Fatalf("gap 0.04: got %+v, %v, want the nearest user", res, err)
 	}
 }
 

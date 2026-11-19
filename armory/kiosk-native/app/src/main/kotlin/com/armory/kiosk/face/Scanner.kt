@@ -101,7 +101,7 @@ class VerifyScanner(
     }
 
     private fun collect(obs: Observation, signal: FaceSignal) {
-        val problem = hint(signal) ?: if (signal.smile != null && !signal.neutral) "Relax your face." else null
+        val problem = hint(signal)
         if (problem != null) {
             samples.clear()
             publish(ScanState.Adjust(problem))
@@ -120,8 +120,8 @@ class VerifyScanner(
         if (samples.size >= IDENT_SAMPLES) {
             val avg = average(samples)
             identity = avg
-            stage = Stage.IDENTIFYING
-            onIdentify(avg)
+            stage = Stage.DONE
+            onEmbedding(avg)
         }
     }
 

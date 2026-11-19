@@ -64,6 +64,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/maintenance/finish", s.signedIn(s.apiFinishMaintenance))
 	mux.HandleFunc("POST /api/requests", s.signedIn(s.apiCreateRequest))
 	mux.HandleFunc("GET /api/requests/current", s.signedIn(s.apiCurrentRequest))
+	mux.HandleFunc("POST /api/requests/current/open", s.signedIn(s.apiOpenForReturn))
 	mux.HandleFunc("GET /api/requests/{id}", s.signedIn(s.apiGetRequest))
 	mux.HandleFunc("POST /api/requests/{id}/cancel", s.signedIn(s.apiCancelRequest))
 	mux.HandleFunc("POST /api/requests/{id}/close", s.signedIn(s.apiCloseRequest))
@@ -78,6 +79,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/lockers", s.adminOnly(s.createLocker))
 	mux.HandleFunc("GET /admin/lockers/{id}", s.adminOnly(s.lockerCard))
 	mux.HandleFunc("GET /admin/lockers/{id}/edit", s.adminOnly(s.editLocker))
+	mux.HandleFunc("POST /admin/lockers/{id}/open", s.adminOnlyWithSession(s.openLocker))
 	mux.HandleFunc("POST /admin/lockers/{id}", s.adminOnly(s.updateLocker))
 	mux.HandleFunc("POST /admin/lockers/{id}/swap", s.adminOnly(s.swapSensors))
 	mux.HandleFunc("POST /admin/lockers/{id}/slots/{slot}/sensor", s.adminOnly(s.setSensorDisabled))
@@ -98,6 +100,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/requests/{id}/approve", s.adminOnlyWithSession(s.decideRequest(true)))
 	mux.HandleFunc("POST /admin/requests/{id}/reject", s.adminOnlyWithSession(s.decideRequest(false)))
 	mux.HandleFunc("POST /admin/requests/{id}/close", s.adminOnlyWithSession(s.closeRequest))
+	mux.HandleFunc("POST /admin/requests/{id}/return/approve", s.adminOnlyWithSession(s.decideReturn(true)))
+	mux.HandleFunc("POST /admin/requests/{id}/return/decline", s.adminOnlyWithSession(s.decideReturn(false)))
 
 	for _, old := range []string{"lockers", "requests", "activity", "users", "login"} {
 		mux.HandleFunc("GET /"+old, redirectTo("/admin/"+old))

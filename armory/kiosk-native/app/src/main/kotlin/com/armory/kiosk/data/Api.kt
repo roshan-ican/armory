@@ -134,6 +134,10 @@ class Api(private val baseUrl: String) {
         if (e.status == 404) null else throw e
     }
 
+    fun openForReturn() {
+        call("POST", "/api/requests/current/open")
+    }
+
     fun request(id: Long): GunRequest = requestOf(JSONObject(call("GET", "/api/requests/$id")))
 
     fun closeRequest(id: Long): CloseResult {
@@ -199,6 +203,7 @@ class Api(private val baseUrl: String) {
             wrong = List(wrong.length()) { wrong.getInt(it) },
             closeNote = o.optString("close_note"),
             closed = o.optBoolean("closed"),
+            returnState = o.optString("return_state"),
         )
     }
 }

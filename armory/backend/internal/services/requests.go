@@ -6,6 +6,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"sync"
 
 	"armory/internal/database"
 	"armory/internal/live"
@@ -21,16 +22,93 @@ type RequestService struct {
 	store *database.Store
 	hw    Hardware
 	hub   *live.Hub
+
+	returnMu  sync.Mutex
+	returning map[int64]string
 }
 
+const (
+	ReturnPending  = "pending"
+	ReturnApproved = "approved"
+	ReturnDeclined = "declined"
+)
+
 func NewRequestService(store *database.Store, hw Hardware, hub *live.Hub) *RequestService {
-	return &RequestService{store: store, hw: hw, hub: hub}
+	return &RequestService{store: store, hw: hw, hub: hub, returning: map[int64]string{}}
+}
+
+type ReturnView struct {
+	Request  models.Request
+	Taken    string
+	Returned string
+	StillOut string
+	PutBack  string
+}
+
+func slotsWithStatus(slots []models.RequestSlot, statuses ...string) []int64 {
+	var out []int64
+	for _, rs := range slots {
+		if slices.Contains(statuses, rs.Status) {
+			out = append(out, rs.SlotNo)
+		}
+	}
+	return out
+}
+
+func (s *RequestService) setReturnState(id int64, state string) {
+	s.returnMu.Lock()
+	defer s.returnMu.Unlock()
+	if state == "" {
+		delete(s.returning, id)
+	} else {
+		s.returning[id] = state
+	}
+}
+
+func (s *RequestService) returnStateOf(id int64) string {
+	s.returnMu.Lock()
+	defer s.returnMu.Unlock()
+	return s.returning[id]
+}
+
+func (s *RequestService) Returning(ctx context.Context) ([]ReturnView, error) {
+	s.returnMu.Lock()
+	ids := make([]int64, 0, len(s.returning))
+	for id, state := range s.returning {
+		if state == ReturnPending {
+			ids = append(ids, id)
+		}
+	}
+	s.returnMu.Unlock()
+	slices.Sort(ids)
+
+	var out []ReturnView
+	for _, id := range ids {
+		req, err := s.store.GetRequest(ctx, id)
+		if err != nil || (req.Status != models.RequestApproved && req.Status != models.RequestCollected) {
+			s.setReturnState(id, "")
+			continue
+		}
+		wrong, err := s.store.WrongSlots(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ReturnView{
+			Request:  req,
+			Taken:    slotWords(slotsWithStatus(req.Slots, models.SlotCollected, models.SlotReturned)),
+			Returned: slotWords(slotsWithStatus(req.Slots, models.SlotReturned)),
+			StillOut: slotWords(slotsWithStatus(req.Slots, models.SlotCollected)),
+			PutBack:  slotWords(wrong),
+		})
+	}
+	return out, nil
 }
 
 type RequestView struct {
-	Request models.Request
-	Slots   []models.Slot
-	Wrong   []int64
+	Request     models.Request
+	Slots       []models.Slot
+	Wrong       []int64
+	ReturnState string
 }
 
 type CatalogSlot struct {
@@ -300,6 +378,7 @@ func (s *RequestService) Close(ctx context.Context, actorID, id int64, force boo
 	if err := s.store.CloseRequest(ctx, id, note); err != nil {
 		return nil, translateRequestError(err)
 	}
+	s.setReturnState(id, "")
 	log.Printf("request %d: closed by %s", id, actor.Name)
 	s.hub.Say(ClosedMessage())
 	s.hub.Publish()
@@ -338,7 +417,7 @@ func (s *RequestService) HistoryPage(ctx context.Context, page int) (RequestHist
 }
 
 func (s *RequestService) view(ctx context.Context, req models.Request) (RequestView, error) {
-	v := RequestView{Request: req}
+	v := RequestView{Request: req, ReturnState: s.returnStateOf(req.ID)}
 	awaitingClose := req.Status == models.RequestReturned && req.ClosedAt == ""
 	if req.Status != models.RequestApproved && req.Status != models.RequestCollected && !awaitingClose {
 		return v, nil
@@ -397,6 +476,86 @@ func (s *RequestService) Reopen(ctx context.Context, userID int64) (RequestView,
 		}
 	}
 	return v, nil
+}
+
+func (s *RequestService) OpenForReturn(ctx context.Context, userID int64) error {
+	v, err := s.Open(ctx, userID)
+	if err != nil {
+		return err
+	}
+	switch v.Request.Status {
+	case models.RequestApproved, models.RequestCollected, models.RequestReturned:
+	default:
+		return ErrRequestClosed
+	}
+	needsApproval := v.Request.Status != models.RequestApproved && len(v.Wrong) == 0 && v.ReturnState != ReturnApproved
+	if !needsApproval {
+		s.unlockForReturn(ctx, v)
+		log.Printf("request %d: user %d opened %s to return guns", v.Request.ID, userID, v.Request.LockerName)
+		return nil
+	}
+	if v.ReturnState != ReturnPending {
+		s.setReturnState(v.Request.ID, ReturnPending)
+		s.hub.Notice(AdminReturnRequestMessage(
+			v.Request.UserName,
+			slotsWithStatus(v.Request.Slots, models.SlotCollected, models.SlotReturned),
+			slotsWithStatus(v.Request.Slots, models.SlotCollected),
+		))
+		log.Printf("request %d: user %d asked to return guns, waiting for admin", v.Request.ID, userID)
+		s.hub.Publish()
+	}
+	return nil
+}
+
+func (s *RequestService) unlockForReturn(ctx context.Context, v RequestView) {
+	nos := slotsWithStatus(v.Request.Slots, models.SlotCollected)
+	nos = append(nos, v.Wrong...)
+	for _, no := range nos {
+		if err := s.hw.Unlock(ctx, v.Request.LockerIP, no); err != nil {
+			log.Printf("unlock locker %s: %v", v.Request.LockerIP, err)
+		}
+	}
+	if err := s.hw.OpenDoor(ctx); err != nil {
+		log.Printf("open door: %v", err)
+	}
+}
+
+func (s *RequestService) pendingReturn(ctx context.Context, adminID, id int64) (RequestView, error) {
+	if err := requireAdmin(ctx, s.store, adminID); err != nil {
+		return RequestView{}, err
+	}
+	req, err := s.store.GetRequest(ctx, id)
+	if err != nil {
+		return RequestView{}, translateRequestError(err)
+	}
+	if s.returnStateOf(id) != ReturnPending {
+		return RequestView{}, ErrRequestClosed
+	}
+	return s.view(ctx, req)
+}
+
+func (s *RequestService) ApproveReturn(ctx context.Context, adminID, id int64) error {
+	v, err := s.pendingReturn(ctx, adminID, id)
+	if err != nil {
+		return err
+	}
+	s.setReturnState(id, ReturnApproved)
+	s.unlockForReturn(ctx, v)
+	log.Printf("request %d: admin %d approved the return", id, adminID)
+	s.hub.Say(ReturnApprovedMessage(v.Request.LockerName))
+	s.hub.Publish()
+	return nil
+}
+
+func (s *RequestService) DeclineReturn(ctx context.Context, adminID, id int64) error {
+	if _, err := s.pendingReturn(ctx, adminID, id); err != nil {
+		return err
+	}
+	s.setReturnState(id, ReturnDeclined)
+	log.Printf("request %d: admin %d declined the return", id, adminID)
+	s.hub.Say(ReturnDeclinedMessage())
+	s.hub.Publish()
+	return nil
 }
 
 func (s *RequestService) Availability(ctx context.Context) (map[string]int64, error) {

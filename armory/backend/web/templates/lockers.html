@@ -120,6 +120,18 @@
   <div class="locker-heading">
     <div class="locker-title-line"><h2>{{.Name}}</h2>{{if .Online}}<span class="board-state is-online"><i></i>Detecting</span>{{else}}<span class="board-state"><i></i>Not detecting</span>{{end}}</div>
     <div class="locker-actions">
+      <button
+        class="button-primary"
+        type="button"
+        hx-post="/admin/lockers/{{.ID}}/open"
+        hx-swap="none"
+        hx-select="unset"
+        hx-confirm="Opens the door and unlocks this locker, even if nobody asked for it."
+        data-confirm-title="Open {{.Name}}?"
+        data-confirm-label="Open"
+      >
+        Open
+      </button>
       <button class="button-secondary" type="button" data-arrange>Arrange</button>
       <button
         class="button-secondary"

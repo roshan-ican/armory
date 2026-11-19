@@ -374,6 +374,17 @@ class KioskViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun openForReturn() = viewModelScope.launch {
+        _state.update { it.copy(busy = true, error = "") }
+        try {
+            withContext(Dispatchers.IO) { api.openForReturn() }
+        } catch (e: ApiException) {
+            _state.update { it.copy(error = e.message.orEmpty()) }
+        } finally {
+            _state.update { it.copy(busy = false) }
+        }
+    }
+
     fun cancelRequest() = viewModelScope.launch {
         _state.value.request?.let { r -> withContext(Dispatchers.IO) { api.cancel(r.id) } }
         beginFace()
